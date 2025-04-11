@@ -44,6 +44,8 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
         os2formwebform_id=os2formwebform_id,
         parsed_form_data=parsed_form_data,
     )
+    if ssn is None and os2formwebform_id not in ('respekt_for_graenser', 'respekt_for_graenser_privat', 'indmeld_kraenkelser_af_boern'):
+        raise ValueError("SSN is None")
     person_full_name = None
     case_folder_id = None
 
@@ -355,5 +357,10 @@ def extract_ssn(os2formwebform_id, parsed_form_data):
                 parsed_form_data["data"]["cpr_barnets_nummer_"] != ""
             ):  # Hvis cpr er indtastet manuelt
                 return parsed_form_data["data"]["cpr_barnets_nummer_"].replace("-", "")
+        case "skriv_dit_barn_paa_venteliste":
+            if parsed_form_data['data']['barnets_cpr_nummer_mitid'] != '':  # Hvis cpr kommer fra MitID
+                return parsed_form_data['data']['barnets_cpr_nummer_mitid'].replace('-', '')
+            if parsed_form_data['data']['cpr_barnets_nummer_'] != '':
+                return parsed_form_data['data']['cpr_barnets_nummer_'].replace('-', '')
         case _:
             return None
