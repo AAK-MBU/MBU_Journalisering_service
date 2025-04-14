@@ -304,9 +304,6 @@ def extract_ssn(os2formwebform_id, parsed_form_data):
         str or None: The extracted SSN as a string with hyphens removed,
             or None if the SSN is not present in the form data.
     """
-    os2formwebform_id = ("anmeldelse_af_hjemmeundervisning"
-                         if os2formwebform_id == "erklaering_af_hjemmeunderv_test"
-                         else os2formwebform_id)  # For testing purposes
     match os2formwebform_id:
         case (
             "indmeldelse_i_modtagelsesklasse"

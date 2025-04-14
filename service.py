@@ -110,7 +110,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
             stop=self.stop,
             servicename=LOG_CONTEXT,
             heartbeat_interval=SERVICE_CHECK_INTERVAL,
-            db_env="TEST",
+            db_env=ENV,
         )
 
         # Log service stop
