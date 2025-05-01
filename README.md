@@ -1,0 +1,2 @@
+# MBU_Journalisering_service
+Journaliseringskomponent somwindows service
