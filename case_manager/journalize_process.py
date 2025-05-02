@@ -215,7 +215,7 @@ def check_case_folder(
         The case folder ID if it exists, otherwise None.
     """
     try:
-        search_data = case_data_handler.search_case_folder_data_json(case_type, person_full_name, person_go_id, ssn)
+        search_data = case_data_handler.search_citizen_folder_data_json(case_type, person_full_name, person_go_id, ssn)
         response = case_handler.search_for_case_folder(search_data, '/_goapi/cases/findbycaseproperties')
 
         if not response.ok:
