@@ -19,7 +19,7 @@ from case_manager.helper_functions import (
     extract_filename_from_url_without_extension
 )
 from case_manager.case_handler import CaseHandler
-from config import LOG_DB, LOG_CONTEXT
+
 
 class DatabaseError(Exception):
     """Custom exception for database related errors."""
@@ -30,6 +30,7 @@ class RequestError(Exception):
 
 
 class EnvVarNotFoundError(Exception):
+    """Custom exception for environment variable not found."""
     def __init__(self, var_name, message="Environment variable not found"):
         self.var_name = var_name
         self.message = f"{message}: {var_name}"
@@ -73,9 +74,9 @@ def log_and_raise_error(
         exception: The passed-in exception is raised after logging the error.
     """
     log_event(
-        log_db=log_db, 
-        level="ERROR", 
-        message=error_message, 
+        log_db=log_db,
+        level="ERROR",
+        message=error_message,
         context=context,
         db_env=db_env,)
     raise exception
@@ -498,7 +499,7 @@ def journalize_file(
     form_id: str,
     case_metadata: str,
     log_db: str,
-    process_name: str,
+    context: str,
     db_env: str,
 ) -> None:
     """Journalize associated files in the 'Document' folder under the citizen case."""
@@ -537,7 +538,7 @@ def journalize_file(
             log_db=log_db,
             level="INFO",
             message=f"Uploading {filename} {upload_status} after {attempts_string}",
-            context=f"{LOG_CONTEXT} ({process_name})",
+            context=context,
             db_env=db_env
             )
 
@@ -545,7 +546,7 @@ def journalize_file(
             log_and_raise_error(
                 log_db=log_db,
                 error_message="An error occurred when uploading the document.",
-                context=f"{LOG_CONTEXT} ({process_name})",
+                context=context,
                 exception=RequestError("Request response failed."),
                 db_env=db_env
             )
@@ -555,7 +556,7 @@ def journalize_file(
             log_db=log_db,
             level="INFO",
             message=f"Document uploaded with ID: {document_id}",
-            context=f"{LOG_CONTEXT} ({process_name})",
+            context=context,
             db_env=db_env,
         )
         return {"DocumentId": str(document_id)}, document_id, file_bytes
@@ -588,7 +589,7 @@ def journalize_file(
                 log_db=log_db,
                 level="INFO",
                 message="Journalizing document.",
-                context=f"{LOG_CONTEXT} ({process_name})",
+                context=context,
                 db_env=db_env,
             )
             response = document_handler.journalize_document(
@@ -598,7 +599,7 @@ def journalize_file(
                 log_and_raise_error(
                     log_db=log_db,
                     error_message="An error occurred while journalizing the document.",
-                    context=f"{LOG_CONTEXT} ({process_name})",
+                    context=context,
                     exception=RequestError("Request response failed."),
                     db_env=db_env,
                 )
@@ -606,7 +607,7 @@ def journalize_file(
                 log_db=log_db,
                 level="INFO",
                 message="Document was journalized.",
-                context=f"{LOG_CONTEXT} ({process_name})",
+                context=context,
                 db_env=db_env,
             )
             print("Attempting notification")
@@ -625,7 +626,7 @@ def journalize_file(
                 log_db=log_db,
                 level="INFO",
                 message="Finalizing document.",
-                context=f"{LOG_CONTEXT} ({process_name})",
+                context=context,
                 db_env=db_env,
             )
             response = document_handler.finalize_document(
@@ -635,7 +636,7 @@ def journalize_file(
                 log_and_raise_error(
                     log_db=log_db,
                     error_message="An error occurred while finalizing the document.",
-                    context=f"{LOG_CONTEXT} ({process_name})",
+                    context=context,
                     exception=RequestError("Request response failed."),
                     db_env=db_env
                 )
@@ -643,7 +644,7 @@ def journalize_file(
                 log_db=log_db,
                 level="INFO",
                 message="Document was finalized.",
-                context=f"{LOG_CONTEXT} ({process_name})",
+                context=context,
                 db_env=db_env,
             )
 
@@ -652,7 +653,7 @@ def journalize_file(
             log_db=log_db,
             level="INFO",
             message="Uploading document(s) to the case.",
-            context=f"{LOG_CONTEXT} ({process_name})",
+            context=context,
             db_env=db_env,
         )
         document_data = json.loads(case_metadata["documentData"])

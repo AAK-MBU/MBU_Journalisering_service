@@ -64,7 +64,6 @@ class JournalizeService(win32serviceutil.ServiceFramework):
         self.stop = False
         self.stop_event = threading.Event()
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS)
-        # set_start_method("forkserver", force=True)
 
     def SvcStop(self):
         """
@@ -243,7 +242,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                                 log_event(
                                     log_db=LOG_DB,
                                     level="ERROR",
-                                    message="Form failed somewhere",
+                                    message=f"Form failed somewhere: {exc}",
                                     context=LOG_CONTEXT,
                                     db_env=ENV
                                 )

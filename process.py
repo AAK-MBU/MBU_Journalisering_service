@@ -44,6 +44,8 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
     person_full_name = None
     case_folder_id = None
 
+    context = f"{LOG_CONTEXT} ({process_name})"
+
     # Get status params
     status_params_inprogress, status_params_success, status_params_failed, status_params_manual = (
         get_status_params(form_id)
@@ -55,8 +57,15 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             parsed_form_data=parsed_form_data,
         )
 
-        if ssn is None: 
+        if ssn is None:
             if os2formwebform_id in ('indmeldelse_i_modtagelsesklasse'):
+                log_event(
+                    LOG_DB,
+                    "INFO",
+                    "No SSN. Setting status as manual.",
+                    context,
+                    db_env
+                )
                 execute_stored_procedure(
                     credentials["DbConnectionString"],
                     case_metadata["spUpdateProcessStatus"],
@@ -72,7 +81,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             message=message,
             case_metadata=case_metadata,
             error=e,
-            process_name=process_name,
+            context=context,
             credentials=credentials,
             form_id=form_id,
             db_env=db_env,
@@ -83,7 +92,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
         LOG_DB,
         "INFO",
         f"Beginning journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }",
-        context=f"{LOG_CONTEXT} ({process_name})",
+        context=context,
         db_env=db_env,
     )
 
@@ -98,7 +107,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             log_db=LOG_DB,
             level="INFO",
             message="Looking up the citizen.",
-            context=f"{LOG_CONTEXT} ({process_name})",
+            context=context,
             db_env=db_env,
         )
         try:
@@ -117,18 +126,17 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 message=message,
                 case_metadata=case_metadata,
                 error=e,
-                process_name=process_name,
+                context=context,
                 credentials=credentials,
                 form_id=form_id,
                 db_env=db_env,
                 form=form,
             )
-            # continue
         log_event(
             LOG_DB,
             "INFO",
             "Checking for existing citizen folder.",
-            context=f"{LOG_CONTEXT} ({process_name})",
+            context=context,
             db_env=db_env,
         )
         try:
@@ -151,19 +159,18 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 message=message,
                 case_metadata=case_metadata,
                 error=e,
-                process_name=process_name,
+                context=context,
                 credentials=credentials,
                 form_id=form_id,
                 db_env=db_env,
                 form=form,
             )
-            # continue
         if not case_folder_id:
             log_event(
                 LOG_DB,
                 "INFO",
                 "Creating citizen folder.",
-                context=f"{LOG_CONTEXT} ({process_name})",
+                context=context,
                 db_env=db_env,
             )
             try:
@@ -185,19 +192,18 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                     message=message,
                     case_metadata=case_metadata,
                     error=e,
-                    process_name=process_name,
+                    context=context,
                     credentials=credentials,
                     form_id=form_id,
                     db_env=db_env,
                     form=form,
                 )
-                # continue
 
     log_event(
         LOG_DB,
         "INFO",
         "Creating case.",
-        context=f"{LOG_CONTEXT} ({process_name})",
+        context=context,
         db_env=db_env,
     )
     case_data = json.loads(case_metadata["caseData"])
@@ -221,7 +227,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             LOG_DB,
             "INFO",
             f"Case created with id: {case_id}",
-            context=f"{LOG_CONTEXT} ({process_name})",
+            context=context,
             db_env=db_env,
         )
     except Exception as e:
@@ -230,15 +236,14 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             message=message,
             case_metadata=case_metadata,
             error=e,
-            process_name=process_name,
+            context=context,
             credentials=credentials,
             form_id=form_id,
             db_env=db_env,
             form=form,
         )
-        # continue
 
-    log_event(LOG_DB, "INFO", "Journalizing file(s).", context=f"{LOG_CONTEXT} ({process_name})", db_env=db_env)
+    log_event(LOG_DB, "INFO", "Journalizing file(s).", context=context, db_env=db_env)
     try:
         jp.journalize_file(
             document_handler=document_handler,
@@ -252,7 +257,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             form_id=form_id,
             case_metadata=case_metadata,
             log_db=LOG_DB,
-            process_name=process_name,
+            context=context,
             db_env=db_env,
         )
     except Exception as e:
@@ -261,13 +266,12 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             message=message,
             case_metadata=case_metadata,
             error=e,
-            process_name=process_name,
+            context=context,
             credentials=credentials,
             form_id=form_id,
             db_env=db_env,
             form=form,
         )
-        # continue
 
     execute_stored_procedure(
         credentials["DbConnectionString"],
@@ -278,7 +282,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
         LOG_DB,
         "INFO",
         f"Ending journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }",
-        context=f"{LOG_CONTEXT} ({process_name})",
+        context=context,
         db_env=db_env,
     )
 
@@ -287,7 +291,7 @@ def handle_error(
     message,
     case_metadata,
     error,
-    process_name,
+    context,
     credentials,
     form_id,
     db_env="PROD",
@@ -302,7 +306,7 @@ def handle_error(
         LOG_DB,
         "ERROR",
         message,
-        context=f"{LOG_CONTEXT} ({process_name})",
+        context=context,
         db_env=db_env,
     )
     # Update status
@@ -376,16 +380,17 @@ def extract_ssn(os2formwebform_id, parsed_form_data):
             | "ansoegning_om_koersel_af_skoleel"
             | "ansoegning_om_midlertidig_koerse"
         ):
-            if "cpr_barnets_nummer" in parsed_form_data["data"]:
+            if parsed_form_data["data"].get("cpr_barnets_nummer", "") != "":
                 return parsed_form_data["data"]["cpr_barnets_nummer"].replace("-", "")
-            if "barnets_cpr_nummer" in parsed_form_data["data"]:
+            if parsed_form_data["data"].get("barnets_cpr_nummer", "") != "":
                 return parsed_form_data["data"]["barnets_cpr_nummer"].replace("-", "")
-            if "cpr_elevens_nummer" in parsed_form_data["data"]:
+            if parsed_form_data["data"].get("cpr_elevens_nummer", "") != "":
                 return parsed_form_data["data"]["cpr_elevens_nummer"].replace("-", "")
-            if "elevens_cpr_nummer" in parsed_form_data["data"]:
+            if parsed_form_data["data"].get("elevens_cpr_nummer", "") != "":
                 return parsed_form_data["data"]["elevens_cpr_nummer"].replace("-", "")
-            if "cpr_barnet" in parsed_form_data["data"]:
+            if parsed_form_data["data"].get("cpr_barnet", "") != "":
                 return parsed_form_data["data"]["cpr_barnet"].replace("-", "")
+            return None
             # TEST webform_id'er. Prod id i journalize_process.py
         case "tilmelding_til_modersmaalsunderv":
             if (
