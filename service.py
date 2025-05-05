@@ -193,7 +193,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                 log_event(
                     LOG_DB,
                     "INFO",
-                    f"Checking new forms for: {', '.join(HANDLE_FORMS)}",
+                    f"Checking new submissions for: {', '.join(HANDLE_FORMS)}",
                     LOG_CONTEXT,
                     ENV
                 )
