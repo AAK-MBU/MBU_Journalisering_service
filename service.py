@@ -190,6 +190,13 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                     connection_string=credentials["DbConnectionString"]  # When credential achieved from srv58, it is srv58.
                 )
                 # Fetch new forms
+                log_event(
+                    LOG_DB,
+                    "INFO",
+                    f"Checking new forms for: {', '.join(HANDLE_FORMS)}",
+                    LOG_CONTEXT,
+                    ENV
+                )
                 forms_data = jp.get_forms_data(
                     conn_string=credentials["DbConnectionString"], params=HANDLE_FORMS
                 )
