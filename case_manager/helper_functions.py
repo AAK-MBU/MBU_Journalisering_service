@@ -180,7 +180,7 @@ def extract_key_value_pairs_from_json(json_data, node_name=None, separator=";#",
             A dictionary with key-value pairs extracted from the string.
         """
         categories = value.split(separator)
-        return {categories[i+1].strip(): categories[i].strip()
+        return {categories[i + 1].strip(): categories[i].strip()
                 for i in range(0, len(categories) - 1, 2)}
 
     def find_and_extract_from_node(data):

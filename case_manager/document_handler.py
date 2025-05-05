@@ -92,3 +92,12 @@ class DocumentHandler:
         endpoint = self._get_full_endpoint(endpoint_path)
 
         return documents.finalize_file(document_ids, endpoint, self.api_username, self.api_password)
+
+    def search_documents_using_search_term(self, search_term, endpoint_path):
+        """
+        Search for all documents related to a specified search_term
+        """
+
+        endpoint = self._get_full_endpoint(endpoint_path)
+
+        return documents.search_documents(search_term, endpoint, self.api_username, self.api_password)

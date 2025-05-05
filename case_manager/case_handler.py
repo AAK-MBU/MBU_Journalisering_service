@@ -32,6 +32,15 @@ class CaseHandler:
             return f"{self.api_endpoint}{path}"
         return self.api_endpoint
 
+    def get_case_metadata(self, endpoint_path):
+        """
+        Function to retrieve metadata for a specified case
+        """
+
+        endpoint = self._get_full_endpoint(endpoint_path)
+
+        return cases.get_case_metadata(endpoint, self.api_username, self.api_password)
+
     def create_case_folder_data(
         self,
         case_type_prefix: objects.CaseTypePrefix,
@@ -47,12 +56,12 @@ class CaseHandler:
         - str: JSON string of case folder data.
         """
         xml_case_metadata = (
-                    '<z:row xmlns:z=\"#RowsetSchema\" '
-                    'ows_CaseStatus=\"Åben\" '
-                    f'ows_CaseCategory=\"Borgermappe\" '
-                    f'ows_CCMContactData=\"{person_full_name};#{person_id};#{person_ssn};#;#\" '
-                    + '/>'
-                )
+            '<z:row xmlns:z=\"#RowsetSchema\" '
+            'ows_CaseStatus=\"Åben\" '
+            f'ows_CaseCategory=\"Borgermappe\" '
+            f'ows_CCMContactData=\"{person_full_name};#{person_id};#{person_ssn};#;#\" '
+            + '/>'
+        )
 
         return self.case_obj.case_data_json(case_type_prefix, xml_case_metadata, return_when_case_fully_created)
 
@@ -84,27 +93,27 @@ class CaseHandler:
         - str: JSON string of case data.
         """
         xml_metadata = (
-                    '<z:row xmlns:z=\"#RowsetSchema\" '
-                    'ows_CaseStatus=\"Åben\" '
-                    f'ows_CaseCategory=\"{case_category}\" '
-                    f'ows_Title=\"{case_title}\" '
-                    f'ows_CaseOwner=\"{case_owner_id};#{case_owner_name}\" '
-                    f'ows_Afdeling=\"{department_id};#{department_name}\" '
-                    f'ows_Sagsprofil_{case_type_prefix}=\"{case_profile_id};#{case_profile_name}\" '
-                    + (f'ows_CCMParentCase=\"{case_folder_id};#{case_type_prefix}\" ' if case_folder_id else '')
-                    + (f'ows_SupplerendeSagsbehandlere=\"{supplementary_case_owners}\" '
-                       if supplementary_case_owners
-                       else '')
-                    + (f'ows_SupplerendeAfdelinger=\"{supplementary_departments}\" '
-                       if supplementary_departments
-                       else '')
-                    + (f'ows_KLENummer=\"{kle_number}\" ' if kle_number else '')
-                    + (f'ows_Facet=\"{facet}\" ' if facet else '')
-                    + (f'ows_Modtaget=\"{start_date}\" ' if start_date else '')
-                    + (f'ows_SpecialGroup=\"{special_group}\" ' if special_group else '')
-                    + (f'ows_CustomMasterCase=\"{custom_master_case}\" ' if custom_master_case else '')
-                    + '/>'
-                )
+            '<z:row xmlns:z=\"#RowsetSchema\" '
+            'ows_CaseStatus=\"Åben\" '
+            f'ows_CaseCategory=\"{case_category}\" '
+            f'ows_Title=\"{case_title}\" '
+            f'ows_CaseOwner=\"{case_owner_id};#{case_owner_name}\" '
+            f'ows_Afdeling=\"{department_id};#{department_name}\" '
+            f'ows_Sagsprofil_{case_type_prefix}=\"{case_profile_id};#{case_profile_name}\" '
+            + (f'ows_CCMParentCase=\"{case_folder_id};#{case_type_prefix}\" ' if case_folder_id else '')
+            + (f'ows_SupplerendeSagsbehandlere=\"{supplementary_case_owners}\" '
+                if supplementary_case_owners
+                else '')
+            + (f'ows_SupplerendeAfdelinger=\"{supplementary_departments}\" '
+                if supplementary_departments
+                else '')
+            + (f'ows_KLENummer=\"{kle_number}\" ' if kle_number else '')
+            + (f'ows_Facet=\"{facet}\" ' if facet else '')
+            + (f'ows_Modtaget=\"{start_date}\" ' if start_date else '')
+            + (f'ows_SpecialGroup=\"{special_group}\" ' if special_group else '')
+            + (f'ows_CustomMasterCase=\"{custom_master_case}\" ' if custom_master_case else '')
+            + '/>'
+        )
 
         return self.case_obj.case_data_json(case_type_prefix, xml_metadata, return_when_case_fully_created)
 

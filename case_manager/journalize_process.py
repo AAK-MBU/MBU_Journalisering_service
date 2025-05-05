@@ -5,6 +5,7 @@ It contains functionality to upload and journalize documents, and manage case da
 import json
 import time
 from typing import Dict, Any, Optional, List, Tuple
+import xml.etree.ElementTree as ET
 import pyodbc
 
 from mbu_dev_shared_components.utils.db_stored_procedure_executor import execute_stored_procedure
@@ -681,3 +682,46 @@ def journalize_file(
             process_status_params_failed,
             RuntimeError(
                 f"An unexpected error occurred during file journalization: {e}"))
+
+  
+def look_for_existing_case(os2form_webform_id, case_handler, document_handler, ssn):
+    """
+    A function to look for an existing citizen case for a specified form type
+    """
+
+    case_id = ""
+    case_title = ""
+    case_relative_url = ""
+
+    keyword_match = ""
+
+    if os2form_webform_id == "indmeldelse_i_modtagelsesklasse":
+        keyword_match = "Kvitteringmodtagelsesklasse"
+
+    # elif os2form_webform_id == "a different webform":  # This way we can apply the check to other webforms
+        # keyword_match = "different keyword"
+
+    response = document_handler.search_documents_using_search_term(ssn, '/_goapi/Search/Results')
+
+    if not response.ok:
+        raise RequestError("Request response failed.")
+
+    res_rows = response.json()["Rows"]
+
+    if "Results" in res_rows:
+        for row in res_rows["Results"]:
+            if "title" in row:
+                if row["title"] == keyword_match:
+                    case_id = row.get("caseid")
+
+                    case_metadata_response = case_handler.get_case_metadata(f'/_goapi/Cases/Metadata/{case_id}')
+
+                    parsed_metadata = ET.fromstring(case_metadata_response.json().get("Metadata")).attrib
+
+                    case_title = parsed_metadata.get("ows_Title")
+
+                    case_relative_url = parsed_metadata.get("ows_CaseUrl")
+
+                    break
+
+    return case_id, case_title, case_relative_url

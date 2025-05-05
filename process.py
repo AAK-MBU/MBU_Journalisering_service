@@ -44,6 +44,8 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
     person_full_name = None
     case_folder_id = None
 
+    create_new_go_case = True
+
     context = f"{LOG_CONTEXT} ({process_name})"
 
     # Get status params
@@ -199,49 +201,77 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                     form=form,
                 )
 
-    log_event(
-        LOG_DB,
-        "INFO",
-        "Creating case.",
-        context=context,
-        db_env=db_env,
-    )
-    case_data = json.loads(case_metadata["caseData"])
-    try:
-        case_id, case_title, case_rel_url = jp.create_case(
-            case_handler=case_handler,
-            parsed_form_data=parsed_form_data,
-            os2form_webform_id=os2formwebform_id,
-            case_type=case_metadata["caseType"],
-            case_data=case_data,
-            conn_string=credentials["DbConnectionString"],
-            update_response_data=case_metadata["spUpdateResponseData"],
-            update_process_status=case_metadata["spUpdateProcessStatus"],
-            process_status_params_failed=status_params_failed,
-            form_id=form_id,
-            ssn=ssn,
-            person_full_name=person_full_name,
-            case_folder_id=case_folder_id,
-        )
+    # Modtagelsesklasse: check for existing case_folder
+    if os2formwebform_id == "indmeldelse_i_modtagelsesklasse":
         log_event(
             LOG_DB,
             "INFO",
-            f"Case created with id: {case_id}",
+            "Form type is modtagelsesklasse - performing check for existing citizen case",
+            context=context
+        )
+
+        case_id, case_title, case_rel_url = jp.look_for_existing_case(
+            os2formwebform_id,
+            case_handler,
+            document_handler,
+            ssn
+        )
+
+        if case_id != "" and case_title != "" and case_rel_url != "":
+            log_event(
+                LOG_DB,
+                "INFO",
+                "Existing citizen case found. Will not create a new case.",
+                context=context
+            )
+
+            create_new_go_case = False
+
+    if create_new_go_case:
+
+        log_event(
+            LOG_DB,
+            "INFO",
+            "Creating case.",
             context=context,
             db_env=db_env,
         )
-    except Exception as e:
-        message = f"Error creating case: {e}"
-        handle_error(
-            message=message,
-            case_metadata=case_metadata,
-            error=e,
-            context=context,
-            credentials=credentials,
-            form_id=form_id,
-            db_env=db_env,
-            form=form,
-        )
+        case_data = json.loads(case_metadata["caseData"])
+        try:
+            case_id, case_title, case_rel_url = jp.create_case(
+                case_handler=case_handler,
+                parsed_form_data=parsed_form_data,
+                os2form_webform_id=os2formwebform_id,
+                case_type=case_metadata["caseType"],
+                case_data=case_data,
+                conn_string=credentials["DbConnectionString"],
+                update_response_data=case_metadata["spUpdateResponseData"],
+                update_process_status=case_metadata["spUpdateProcessStatus"],
+                process_status_params_failed=status_params_failed,
+                form_id=form_id,
+                ssn=ssn,
+                person_full_name=person_full_name,
+                case_folder_id=case_folder_id,
+            )
+            log_event(
+                LOG_DB,
+                "INFO",
+                f"Case created with id: {case_id}",
+                context=context,
+                db_env=db_env,
+            )
+        except Exception as e:
+            message = f"Error creating case: {e}"
+            handle_error(
+                message=message,
+                case_metadata=case_metadata,
+                error=e,
+                context=context,
+                credentials=credentials,
+                form_id=form_id,
+                db_env=db_env,
+                form=form,
+            )
 
     log_event(LOG_DB, "INFO", "Journalizing file(s).", context=context, db_env=db_env)
     try:
