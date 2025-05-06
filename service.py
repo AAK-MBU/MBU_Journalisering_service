@@ -237,19 +237,20 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                 else:
                     # We use a with statement to ensure threads are cleaned up promptly
                     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:  # Open parallel executor
-                        for form in forms_data:  # Loop over pending forms
-                            if self.stop_event.is_set():  # Check for stop event
-                                break  # Break out of for-loop if stop_event is set
-                            args = (form, credentials, cases_metadata, ENV)  # Package args
-                            future = executor.submit(self.worker, args)  # Submit form to be handled
-                            self.futures.append(future)  # Add future to list of ongoing futures
+                        future_to_worker = {
+                            executor.submit(self.worker,  (form, credentials, cases_metadata, ENV)): form 
+                            for form in forms_data
+                        }
+                        self.futures.extend(future_to_worker.keys())  # Add all futures to list of futures
+                        for future in concurrent.futures.as_completed(future_to_worker):  # Loop over pending forms
+                            form = future_to_worker[future]
                             try:
                                 res = future.result()  # Checks for uncaught exceptions in the worker
                             except Exception as exc:
                                 log_event(
                                     log_db=LOG_DB,
                                     level="ERROR",
-                                    message=f"Form failed somewhere: {exc}",
+                                    message=f"Form {form["form_id"]} failed somewhere: {exc}",
                                     context=LOG_CONTEXT,
                                     db_env=ENV
                                 )
@@ -263,6 +264,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                         message="ThreadPoolExecutor exited cleanly",
                         context=LOG_CONTEXT,
                         db_env=ENV)
+                    self.futures.clear()  # Clear list of futures when processes are finished
 
         except Exception as e:
             servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE, 0xF000, (f"Service encountered an error: {e}", ""))
