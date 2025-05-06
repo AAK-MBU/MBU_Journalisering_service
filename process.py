@@ -207,7 +207,8 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             LOG_DB,
             "INFO",
             "Form type is modtagelsesklasse - performing check for existing citizen case",
-            context=context
+            context=context,
+            db_env=db_env
         )
 
         case_id, case_title, case_rel_url = jp.look_for_existing_case(
@@ -222,7 +223,8 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 LOG_DB,
                 "INFO",
                 "Existing citizen case found. Will not create a new case.",
-                context=context
+                context=context,
+                db_env=db_env
             )
 
             create_new_go_case = False
