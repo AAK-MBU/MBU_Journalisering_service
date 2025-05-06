@@ -348,7 +348,7 @@ def notify_stakeholders(
                     log_db=LOG_DB,
                     level="INFO",
                     message="Notification sent to stakeholder",
-                    context=f"{LOG_CONTEXT}, ({process_name})",
+                    context=f"{LOG_CONTEXT} ({process_name})",
                     db_env=db_env
                 )
         else:

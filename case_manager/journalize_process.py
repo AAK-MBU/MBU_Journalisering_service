@@ -366,7 +366,7 @@ def determine_case_profile_id(case_profile_name: str) -> str:
     """Determine the case profile ID based on the case profile name."""
     try:
         credentials = get_credentials_and_constants()
-        conn_string = credentials['sql_conn_string']
+        conn_string = credentials['DbConnectionString']
 
         with pyodbc.connect(conn_string) as conn:
             cursor = conn.cursor()
