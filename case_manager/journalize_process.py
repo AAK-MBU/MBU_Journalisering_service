@@ -8,6 +8,9 @@ from typing import Dict, Any, Optional, List, Tuple
 import xml.etree.ElementTree as ET
 import pyodbc
 
+from datetime import date, datetime
+from dateutil.relativedelta import relativedelta
+
 from mbu_dev_shared_components.utils.db_stored_procedure_executor import execute_stored_procedure
 from mbu_dev_shared_components.os2forms.documents import download_file_bytes
 from mbu_dev_shared_components.database import constants
@@ -502,6 +505,7 @@ def journalize_file(
     log_db: str,
     context: str,
     db_env: str,
+    create_new_case: bool = True
 ) -> None:
     """Journalize associated files in the 'Document' folder under the citizen case."""
 
@@ -509,6 +513,12 @@ def journalize_file(
         """N/A"""
         filename = extract_filename_from_url(url)
         filename_without_extension = extract_filename_from_url_without_extension(url)
+
+        if not create_new_case:
+            today_str = date.today().isoformat()
+            filename = f"{filename}_{today_str}"
+            filename_without_extension = f"{filename_without_extension}_{today_str}"
+
         file_bytes = download_file_bytes(url, os2_api_key)
         upload_status = "failed"
         upload_attempts = 0
@@ -541,7 +551,7 @@ def journalize_file(
             message=f"Uploading {filename} {upload_status} after {attempts_string}",
             context=context,
             db_env=db_env
-            )
+        )
 
         if not response.ok:
             log_and_raise_error(
@@ -683,7 +693,7 @@ def journalize_file(
             RuntimeError(
                 f"An unexpected error occurred during file journalization: {e}"))
 
-  
+
 def look_for_existing_case(os2form_webform_id, case_handler, document_handler, ssn):
     """
     A function to look for an existing citizen case for a specified form type
@@ -708,20 +718,32 @@ def look_for_existing_case(os2form_webform_id, case_handler, document_handler, s
 
     res_rows = response.json()["Rows"]
 
-    if "Results" in res_rows:
-        for row in res_rows["Results"]:
-            if "title" in row:
-                if row["title"] == keyword_match:
-                    case_id = row.get("caseid")
+    # Calculate the cutoff date (3 months ago)
+    three_months_ago = date.today() - relativedelta(months=3)
 
-                    case_metadata_response = case_handler.get_case_metadata(f'/_goapi/Cases/Metadata/{case_id}')
+    # Look for a recently created matching case
+    for row in res_rows.get("Results", []):
+        if row.get("title") == keyword_match and row.get("created"):
+            # Parse the creation timestamp (ISO format expected)
+            try:
+                created_date = datetime.fromisoformat(row["created"]).date()
 
-                    parsed_metadata = ET.fromstring(case_metadata_response.json().get("Metadata")).attrib
+            except ValueError:
+                # Skip rows with unparsable dates
+                continue
 
-                    case_title = parsed_metadata.get("ows_Title")
+            # Only accept if created within the last 3 months
+            if created_date >= three_months_ago:
+                case_id = row.get("caseid", "")
 
-                    case_relative_url = parsed_metadata.get("ows_CaseUrl")
+                case_metadata_response = case_handler.get_case_metadata(f'/_goapi/Cases/Metadata/{case_id}')
 
-                    break
+                parsed_metadata = ET.fromstring(case_metadata_response.json().get("Metadata")).attrib
+
+                case_relative_url = parsed_metadata.get("ows_CaseUrl", "")
+
+                case_title = parsed_metadata.get("ows_Title", "")
+
+                break
 
     return case_id, case_title, case_relative_url
