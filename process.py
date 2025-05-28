@@ -223,7 +223,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             log_event(
                 LOG_DB,
                 "INFO",
-                "Existing citizen case found. Will not create a new case.",
+                f"Existing citizen case found ({case_id}). Will not create a new case.",
                 context=context,
                 db_env=db_env
             )
