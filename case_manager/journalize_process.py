@@ -4,9 +4,12 @@ It contains functionality to upload and journalize documents, and manage case da
 """
 import json
 import time
-from typing import Dict, Any, Optional, List, Tuple
+import os
+import re
 import xml.etree.ElementTree as ET
 import pyodbc
+
+from typing import Dict, Any, Optional, List, Tuple
 
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
@@ -505,7 +508,7 @@ def journalize_file(
     log_db: str,
     context: str,
     db_env: str,
-    create_new_case: bool = True
+    filename_appendage: str = ""
 ) -> None:
     """Journalize associated files in the 'Document' folder under the citizen case."""
 
@@ -514,10 +517,12 @@ def journalize_file(
         filename = extract_filename_from_url(url)
         filename_without_extension = extract_filename_from_url_without_extension(url)
 
-        if not create_new_case:
-            today_str = date.today().isoformat()
-            filename = f"{filename}_{today_str}"
-            filename_without_extension = f"{filename_without_extension}_{today_str}"
+        if filename_appendage != "":
+            name, ext = os.path.splitext(filename)
+
+            filename = f"{name}{filename_appendage}{ext}"
+
+            filename_without_extension = f"{filename_without_extension}{filename_appendage}"
 
         file_bytes = download_file_bytes(url, os2_api_key)
         upload_status = "failed"
@@ -703,47 +708,62 @@ def look_for_existing_case(os2form_webform_id, case_handler, document_handler, s
     case_title = ""
     case_relative_url = ""
 
-    keyword_match = ""
+    filename_appendage = ""
+
+    keyword = ""
+
+    max_suffix = 1  # Default to 1 if no suffixes found
+
+    # Default cutoff date for 6 months
+    cutoff_date = date.today() - relativedelta(months=6)
 
     if os2form_webform_id == "indmeldelse_i_modtagelsesklasse":
-        keyword_match = "Kvitteringmodtagelsesklasse"
+        keyword = "Kvitteringmodtagelsesklasse"
+
+        cutoff_date = date.today() - relativedelta(months=3)
 
     # elif os2form_webform_id == "a different webform":  # This way we can apply the check to other webforms
         # keyword_match = "different keyword"
 
-    response = document_handler.search_documents_using_search_term(ssn, '/_goapi/Search/Results')
+    response = document_handler.search_documents_using_search_term(f'{ssn} {keyword}', '/_goapi/Search/Results')
 
     if not response.ok:
-        raise RequestError("Request response failed.")
+        raise Exception("Request response failed.")
 
-    res_rows = response.json()["Rows"]
+    res_rows = response.json()["Rows"].get("Results", [])
 
-    # Calculate the cutoff date (3 months ago)
-    three_months_ago = date.today() - relativedelta(months=3)
+    res_rows.sort(key=lambda x: x.get("created", ""), reverse=True)
 
     # Look for a recently created matching case
-    for row in res_rows.get("Results", []):
-        if row.get("title") == keyword_match and row.get("created"):
-            # Parse the creation timestamp (ISO format expected)
-            try:
-                created_date = datetime.fromisoformat(row["created"]).date()
+    for row in res_rows:
+        if keyword in row.get("title", "") and row.get("created"):
+            created_date = datetime.fromisoformat(row["created"]).date()
 
-            except ValueError:
-                # Skip rows with unparsable dates
-                continue
+            doc_title = row.get("title", "")
 
-            # Only accept if created within the last 3 months
-            if created_date >= three_months_ago:
+            if created_date >= cutoff_date:
+                match = re.match(rf"^{keyword}_(\d+)$", doc_title)
+
+                if match:
+                    suffix_num = int(match.group(1))
+
+                    max_suffix = max(max_suffix, suffix_num + 1)
+
+                elif doc_title == keyword:
+                    max_suffix = max(max_suffix, 2)  # Means first "_2" version needed
+
                 case_id = row.get("caseid", "")
 
                 case_metadata_response = case_handler.get_case_metadata(f'/_goapi/Cases/Metadata/{case_id}')
 
                 parsed_metadata = ET.fromstring(case_metadata_response.json().get("Metadata")).attrib
 
-                case_relative_url = parsed_metadata.get("ows_CaseUrl", "")
-
                 case_title = parsed_metadata.get("ows_Title", "")
 
-                break
+                case_relative_url = parsed_metadata.get("ows_CaseUrl", "")
 
-    return case_id, case_title, case_relative_url
+                break  # Stop after first valid match
+
+    filename_appendage = f"_{max_suffix}"
+
+    return case_id, case_title, case_relative_url, filename_appendage

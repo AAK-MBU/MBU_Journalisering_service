@@ -45,6 +45,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
     case_folder_id = None
 
     create_new_go_case = True
+    filename_appendage = ""
 
     context = f"{LOG_CONTEXT} ({process_name})"
 
@@ -211,7 +212,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             db_env=db_env
         )
 
-        case_id, case_title, case_rel_url = jp.look_for_existing_case(
+        case_id, case_title, case_rel_url, filename_appendage = jp.look_for_existing_case(
             os2formwebform_id,
             case_handler,
             document_handler,
@@ -291,6 +292,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             log_db=LOG_DB,
             context=context,
             db_env=db_env,
+            filename_appendage=filename_appendage
         )
     except Exception as e:
         message = f"Error journalizing files. {e}"
