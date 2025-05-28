@@ -4,9 +4,15 @@ It contains functionality to upload and journalize documents, and manage case da
 """
 import json
 import time
-from typing import Dict, Any, Optional, List, Tuple
+import os
+import re
 import xml.etree.ElementTree as ET
 import pyodbc
+
+from typing import Dict, Any, Optional, List, Tuple
+
+from datetime import date, datetime
+from dateutil.relativedelta import relativedelta
 
 from mbu_dev_shared_components.utils.db_stored_procedure_executor import execute_stored_procedure
 from mbu_dev_shared_components.os2forms.documents import download_file_bytes
@@ -502,6 +508,7 @@ def journalize_file(
     log_db: str,
     context: str,
     db_env: str,
+    filename_appendage: str = ""
 ) -> None:
     """Journalize associated files in the 'Document' folder under the citizen case."""
 
@@ -509,6 +516,14 @@ def journalize_file(
         """N/A"""
         filename = extract_filename_from_url(url)
         filename_without_extension = extract_filename_from_url_without_extension(url)
+
+        if filename_appendage != "":
+            name, ext = os.path.splitext(filename)
+
+            filename = f"{name}{filename_appendage}{ext}"
+
+            filename_without_extension = f"{filename_without_extension}{filename_appendage}"
+
         file_bytes = download_file_bytes(url, os2_api_key)
         upload_status = "failed"
         upload_attempts = 0
@@ -541,7 +556,7 @@ def journalize_file(
             message=f"Uploading {filename} {upload_status} after {attempts_string}",
             context=context,
             db_env=db_env
-            )
+        )
 
         if not response.ok:
             log_and_raise_error(
@@ -683,7 +698,7 @@ def journalize_file(
             RuntimeError(
                 f"An unexpected error occurred during file journalization: {e}"))
 
-  
+
 def look_for_existing_case(os2form_webform_id, case_handler, document_handler, ssn):
     """
     A function to look for an existing citizen case for a specified form type
@@ -693,35 +708,62 @@ def look_for_existing_case(os2form_webform_id, case_handler, document_handler, s
     case_title = ""
     case_relative_url = ""
 
-    keyword_match = ""
+    filename_appendage = ""
+
+    keyword = ""
+
+    max_suffix = 1  # Default to 1 if no suffixes found
+
+    # Default cutoff date for 6 months
+    cutoff_date = date.today() - relativedelta(months=6)
 
     if os2form_webform_id == "indmeldelse_i_modtagelsesklasse":
-        keyword_match = "Kvitteringmodtagelsesklasse"
+        keyword = "Kvitteringmodtagelsesklasse"
+
+        cutoff_date = date.today() - relativedelta(months=3)
 
     # elif os2form_webform_id == "a different webform":  # This way we can apply the check to other webforms
         # keyword_match = "different keyword"
 
-    response = document_handler.search_documents_using_search_term(ssn, '/_goapi/Search/Results')
+    response = document_handler.search_documents_using_search_term(f'{ssn} {keyword}', '/_goapi/Search/Results')
 
     if not response.ok:
-        raise RequestError("Request response failed.")
+        raise Exception("Request response failed.")
 
-    res_rows = response.json()["Rows"]
+    res_rows = response.json()["Rows"].get("Results", [])
 
-    if "Results" in res_rows:
-        for row in res_rows["Results"]:
-            if "title" in row:
-                if row["title"] == keyword_match:
-                    case_id = row.get("caseid")
+    res_rows.sort(key=lambda x: x.get("created", ""), reverse=True)
 
-                    case_metadata_response = case_handler.get_case_metadata(f'/_goapi/Cases/Metadata/{case_id}')
+    # Look for a recently created matching case
+    for row in res_rows:
+        if keyword in row.get("title", "") and row.get("created"):
+            created_date = datetime.fromisoformat(row["created"]).date()
 
-                    parsed_metadata = ET.fromstring(case_metadata_response.json().get("Metadata")).attrib
+            doc_title = row.get("title", "")
 
-                    case_title = parsed_metadata.get("ows_Title")
+            if created_date >= cutoff_date:
+                match = re.match(rf"^{keyword}_(\d+)$", doc_title)
 
-                    case_relative_url = parsed_metadata.get("ows_CaseUrl")
+                if match:
+                    suffix_num = int(match.group(1))
 
-                    break
+                    max_suffix = max(max_suffix, suffix_num + 1)
 
-    return case_id, case_title, case_relative_url
+                elif doc_title == keyword:
+                    max_suffix = max(max_suffix, 2)  # Means first "_2" version needed
+
+                case_id = row.get("caseid", "")
+
+                case_metadata_response = case_handler.get_case_metadata(f'/_goapi/Cases/Metadata/{case_id}')
+
+                parsed_metadata = ET.fromstring(case_metadata_response.json().get("Metadata")).attrib
+
+                case_title = parsed_metadata.get("ows_Title", "")
+
+                case_relative_url = parsed_metadata.get("ows_CaseUrl", "")
+
+                break  # Stop after first valid match
+
+    filename_appendage = f"_{max_suffix}"
+
+    return case_id, case_title, case_relative_url, filename_appendage
