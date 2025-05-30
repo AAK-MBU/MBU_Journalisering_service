@@ -764,6 +764,7 @@ def look_for_existing_case(os2form_webform_id, case_handler, document_handler, s
 
                 break  # Stop after first valid match
 
-    filename_appendage = f"_{max_suffix}"
+    if case_id != "" and case_title != "" and case_relative_url != "":
+        filename_appendage = f"_{max_suffix}"
 
     return case_id, case_title, case_relative_url, filename_appendage
