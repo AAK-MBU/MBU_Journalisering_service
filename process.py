@@ -212,8 +212,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             db_env=db_env
         )
 
-        case_id, case_title, case_rel_url, filename_appendage = jp.look_for_existing_case(
-            os2formwebform_id,
+        case_id, case_title, case_rel_url, filename_appendage = jp.look_for_existing_modtagelsesklasse_case(
             case_handler,
             document_handler,
             ssn
