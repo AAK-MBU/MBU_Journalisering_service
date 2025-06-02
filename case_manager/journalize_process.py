@@ -699,7 +699,7 @@ def journalize_file(
                 f"An unexpected error occurred during file journalization: {e}"))
 
 
-def look_for_existing_case(os2form_webform_id, case_handler, document_handler, ssn):
+def look_for_existing_modtagelsesklasse_case(case_handler, document_handler, ssn):
     """
     A function to look for an existing citizen case for a specified form type
     """
@@ -710,20 +710,11 @@ def look_for_existing_case(os2form_webform_id, case_handler, document_handler, s
 
     filename_appendage = ""
 
-    keyword = ""
+    keyword = "Kvitteringmodtagelsesklasse"
 
-    max_suffix = 1  # Default to 1 if no suffixes found
+    max_suffix = 2
 
-    # Default cutoff date for 6 months
-    cutoff_date = date.today() - relativedelta(months=6)
-
-    if os2form_webform_id == "indmeldelse_i_modtagelsesklasse":
-        keyword = "Kvitteringmodtagelsesklasse"
-
-        cutoff_date = date.today() - relativedelta(months=3)
-
-    # elif os2form_webform_id == "a different webform":  # This way we can apply the check to other webforms
-        # keyword_match = "different keyword"
+    cutoff_date = date.today() - relativedelta(months=3)
 
     response = document_handler.search_documents_using_search_term(f'{ssn} {keyword}', '/_goapi/Search/Results')
 
@@ -747,10 +738,7 @@ def look_for_existing_case(os2form_webform_id, case_handler, document_handler, s
                 if match:
                     suffix_num = int(match.group(1))
 
-                    max_suffix = max(max_suffix, suffix_num + 1)
-
-                elif doc_title == keyword:
-                    max_suffix = max(max_suffix, 2)  # Means first "_2" version needed
+                    max_suffix = suffix_num + 1
 
                 case_id = row.get("caseid", "")
 
@@ -764,6 +752,7 @@ def look_for_existing_case(os2form_webform_id, case_handler, document_handler, s
 
                 break  # Stop after first valid match
 
-    filename_appendage = f"_{max_suffix}"
+    if case_id != "" and case_title != "" and case_relative_url != "":
+        filename_appendage = f"_{max_suffix}"
 
     return case_id, case_title, case_relative_url, filename_appendage
