@@ -238,19 +238,21 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                     # We use a with statement to ensure threads are cleaned up promptly
                     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:  # Open parallel executor
                         future_to_worker = {
-                            executor.submit(self.worker,  (form, credentials, cases_metadata, ENV)): form 
+                            executor.submit(self.worker,  (form, credentials, cases_metadata, ENV)): form
                             for form in forms_data
                         }
                         self.futures.extend(future_to_worker.keys())  # Add all futures to list of futures
                         for future in concurrent.futures.as_completed(future_to_worker):  # Loop over pending forms
                             form = future_to_worker[future]
                             try:
-                                res = future.result()  # Checks for uncaught exceptions in the worker
+                                # pylint: disable-next=unused-variable
+                                # fla
+                                res = future.result()  # Checks for uncaught exceptions in the worker # noqa: F841
                             except Exception as exc:
                                 log_event(
                                     log_db=LOG_DB,
                                     level="ERROR",
-                                    message=f"Form {form["form_id"]} failed somewhere: {exc}",
+                                    message=f"Form {form['form_id']} failed somewhere: {exc}",
                                     context=LOG_CONTEXT,
                                     db_env=ENV
                                 )
