@@ -231,6 +231,33 @@ def check_case_folder(
         cases_info = response.json().get('CasesInfo', [])
         case_folder_id = cases_info[0].get('CaseID') if cases_info else None
 
+        if case_folder_id is None:
+            field_properties = {
+                "ows_CCMContactData_CPR": ssn
+            }
+
+            search_data = case_data_handler.generic_search_case_data_json(
+                case_type,
+                person_full_name,
+                person_go_id,
+                ssn,
+                include_name=True,
+                returned_cases_number="25",
+                field_properties=field_properties
+            )
+
+            response = case_handler.search_for_case_folder(search_data, '/_goapi/cases/findbycaseproperties')
+
+            res_json = response.json()
+
+            pattern = re.compile(r"^BOR-\d{4}-\d{6}$")
+
+            for row in res_json.get('CasesInfo', []):
+                if pattern.match(row.get('CaseID', '')):
+                    case_folder_id = row.get('CaseID')
+
+                    break
+
         if case_folder_id:
             sql_data_params = {
                 "StepName": ("str", "CaseFolder"),
