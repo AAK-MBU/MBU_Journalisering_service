@@ -7,11 +7,14 @@ from mbu_dev_shared_components.utils.db_stored_procedure_executor import (
 )
 from mbu_dev_shared_components.getorganized.objects import CaseDataJson
 from mbu_dev_shared_components.database.logging import log_event
+from mbu_dev_shared_components.database import constants
 
 from case_manager.case_handler import CaseHandler
 from case_manager.document_handler import DocumentHandler
 from case_manager import journalize_process as jp
 from case_manager.helper_functions import notify_stakeholders
+
+from itk_dev_shared_components.smtp import smtp_util
 
 from config import LOG_DB, LOG_CONTEXT
 
@@ -74,6 +77,31 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                     case_metadata["spUpdateProcessStatus"],
                     status_params_manual
                 )
+
+                email_body = (
+                    f"<p>Ny indmeldelse i modtagelsesklasse mangler barns CPR-nummer.</p>"
+                    f"<p>"
+                    f"<strong>Form type:</strong> {os2formwebform_id}<br>"
+                    f"<strong>Process navn:</strong> {process_name}<br>"
+                    f"<strong>Form id:</strong> {form_id}<br>"
+                    f"<strong>Form submitted date:</strong> {form_submitted_date}<br>"
+                    f"</p>"
+                )
+                smtp_util.send_email(
+                    receiver="rpa@mbu.aarhus.dk",
+                    sender=constants.get_constant("e-mail_noreply", db_env=db_env)["value"],
+                    subject="Journalisering af modtagelsesklasse - besvarelse mangler CPR-nummer",
+                    body=email_body,
+                    html_body=email_body,
+                    smtp_server=constants.get_constant("smtp_server", db_env=db_env)[
+                        "value"
+                    ],
+                    smtp_port=constants.get_constant("smtp_port", db_env=db_env)[
+                        "value"
+                    ],
+                    attachments=None,
+                )
+
                 return None
             if os2formwebform_id not in ('respekt_for_graenser', 'respekt_for_graenser_privat', 'indmeld_kraenkelser_af_boern'):
                 raise ValueError("SSN is None")
