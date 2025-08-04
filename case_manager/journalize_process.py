@@ -25,6 +25,9 @@ from case_manager.helper_functions import (
     notify_stakeholders,
     extract_filename_from_url_without_extension
 )
+
+from itk_dev_shared_components.smtp import smtp_util
+
 from case_manager.case_handler import CaseHandler
 
 
@@ -255,6 +258,30 @@ def check_case_folder(
             for row in res_json.get('CasesInfo', []):
                 if pattern.match(row.get('CaseID', '')):
                     case_folder_id = row.get('CaseID')
+
+                    # if we find a case folder, that matches the pattern, it means the citizen has a citizen folder, but it is NOT set with the correct caseCategory (Borgermappe)
+                    email_body = (
+                        f"<p>Journaliseringsrobot har fanget en borgermappe som er oprettet med forkert caseCategory.</p>"
+                        f"<p>"
+                        f"<strong>Borger CPR: {ssn}<br>"
+                        f"</p>"
+                        f"<strong>Journaliseringen af sag er successfuld - ræk ud til GO-team for at få rettet borgermappe<br>"
+                        f"</p>"
+                    )
+                    smtp_util.send_email(
+                        receiver="rpa@mbu.aarhus.dk",
+                        sender=constants.get_constant("e-mail_noreply")["value"],
+                        subject="Borgermappe oprettet forkert, caseCategory er IKKE 'Borgermappe'",
+                        body=email_body,
+                        html_body=email_body,
+                        smtp_server=constants.get_constant("smtp_server", db_env="PROD")[
+                            "value"
+                        ],
+                        smtp_port=constants.get_constant("smtp_port", db_env="PROD")[
+                            "value"
+                        ],
+                        attachments=None,
+                    )
 
                     break
 
