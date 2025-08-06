@@ -146,6 +146,7 @@ def get_forms_data(conn_string: str, params: Optional[List[Any]] = None) -> List
 def get_credentials_and_constants(db_env="PROD") -> Dict[str, Any]:
     """Retrieve necessary credentials from system environment variables"""
     try:
+        # !!Update to new database structure on mbu_dev_shared_components!!
         credentials = {
             "go_api_endpoint": constants.get_constant("go_api_endpoint", db_env=db_env)["value"],
             "go_api_username": constants.get_credential("go_api", db_env=db_env)["username"],
