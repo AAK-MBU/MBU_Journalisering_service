@@ -25,6 +25,9 @@ from case_manager.helper_functions import (
     notify_stakeholders,
     extract_filename_from_url_without_extension
 )
+
+from itk_dev_shared_components.smtp import smtp_util
+
 from case_manager.case_handler import CaseHandler
 
 
@@ -230,6 +233,57 @@ def check_case_folder(
 
         cases_info = response.json().get('CasesInfo', [])
         case_folder_id = cases_info[0].get('CaseID') if cases_info else None
+
+        if case_folder_id is None:
+            field_properties = {
+                "ows_CCMContactData_CPR": ssn
+            }
+
+            search_data = case_data_handler.generic_search_case_data_json(
+                case_type,
+                person_full_name,
+                person_go_id,
+                ssn,
+                include_name=True,
+                returned_cases_number="25",
+                field_properties=field_properties
+            )
+
+            response = case_handler.search_for_case_folder(search_data, '/_goapi/cases/findbycaseproperties')
+
+            res_json = response.json()
+
+            pattern = re.compile(r"^BOR-\d{4}-\d{6}$")
+
+            for row in res_json.get('CasesInfo', []):
+                if pattern.match(row.get('CaseID', '')):
+                    case_folder_id = row.get('CaseID')
+
+                    # if we find a case folder, that matches the pattern, it means the citizen has a citizen folder, but it is NOT set with the correct caseCategory (Borgermappe)
+                    email_body = (
+                        f"<p>Journaliseringsrobot har fanget en borgermappe som er oprettet med forkert caseCategory.</p>"
+                        f"<p>"
+                        f"<strong>Borger CPR: {ssn}<br>"
+                        f"</p>"
+                        f"<strong>Journaliseringen af sag er successfuld - ræk ud til GO-team for at få rettet borgermappe<br>"
+                        f"</p>"
+                    )
+                    smtp_util.send_email(
+                        receiver="rpa@mbu.aarhus.dk",
+                        sender=constants.get_constant("e-mail_noreply")["value"],
+                        subject="Borgermappe oprettet forkert, caseCategory er IKKE 'Borgermappe'",
+                        body=email_body,
+                        html_body=email_body,
+                        smtp_server=constants.get_constant("smtp_server", db_env="PROD")[
+                            "value"
+                        ],
+                        smtp_port=constants.get_constant("smtp_port", db_env="PROD")[
+                            "value"
+                        ],
+                        attachments=None,
+                    )
+
+                    break
 
         if case_folder_id:
             sql_data_params = {
