@@ -259,17 +259,20 @@ def check_case_folder(
                 if pattern.match(row.get('CaseID', '')):
                     case_folder_id = row.get('CaseID')
 
+                    case_url = "https://go.aarhuskommune.dk" + row.get('RelativeUrl')
+
                     # if we find a case folder, that matches the pattern, it means the citizen has a citizen folder, but it is NOT set with the correct caseCategory (Borgermappe)
                     email_body = (
                         f"<p>Journaliseringsrobot har fanget en borgermappe som er oprettet med forkert caseCategory.</p>"
                         f"<p>"
-                        f"<strong>Borger CPR: {ssn}<br>"
+                        f"<strong>Case URL: {case_url}</strong><br>"
                         f"</p>"
                         f"<strong>Journaliseringen af sag er successfuld - ræk ud til GO-team for at få rettet borgermappe<br>"
                         f"</p>"
                         f"<p>Husk at slette denne mail efter GO-team er notificeret!</p>"
                         f"</p>"
                     )
+
                     smtp_util.send_email(
                         receiver="rpa@mbu.aarhus.dk",
                         sender=constants.get_constant("e-mail_noreply")["value"],
