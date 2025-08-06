@@ -267,6 +267,8 @@ def check_case_folder(
                         f"</p>"
                         f"<strong>Journaliseringen af sag er successfuld - ræk ud til GO-team for at få rettet borgermappe<br>"
                         f"</p>"
+                        f"<p>Husk at slette denne mail efter GO-team er notificeret!</p>"
+                        f"</p>"
                     )
                     smtp_util.send_email(
                         receiver="rpa@mbu.aarhus.dk",
