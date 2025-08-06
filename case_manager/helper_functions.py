@@ -264,6 +264,8 @@ def notify_stakeholders(
         db_env="PROD"):
     """Notify stakeholders about the journalized case."""
     try:
+        if form is None:
+            form = {}
         form_type = case_metadata["os2formwebform_id"]
         process_name = case_metadata.get("description")
         email_sender = constants.get_constant("e-mail_noreply", db_env=db_env)["value"]  # Get constants elsewhere
@@ -277,7 +279,7 @@ def notify_stakeholders(
             case_rel_url
         ) if case_rel_url else None
 
-        case_data = json.loads(case_metadata.get("caseData", {}))
+        case_data = json.loads(case_metadata.get("caseData", "{}"))
         email_recipient = case_data.get("emailRecipient")
         email_subject = (
             f"Ny sag er blevet journaliseret: {process_name}"
@@ -292,6 +294,7 @@ def notify_stakeholders(
         )
 
         if error_message:
+            critical = form_type in ("indmeld_kraenkelser_af_boern", "respekt_for_graenser_privat", "respekt_for_graenser")
             email_recipient = constants.get_constant(
                 "Error Email",
                 db_env=db_env
@@ -309,6 +312,12 @@ def notify_stakeholders(
                 f"<strong>Fejlbesked:</strong> {error_message}"
                 f"</p>"
             )
+            if critical:
+                rpa_team_email = constants.get_constant("rpa_team_email", db_env=db_env)['value']
+                rpa_team_email_list = json.loads(rpa_team_email)
+                email_recipient = [email_recipient]
+                email_recipient.extend(rpa_team_email_list)
+                email_subject = "!!KRITISK!!! Fejl ved journalisering af sag"
 
         elif form_type in ("indmeld_kraenkelser_af_boern", "respekt_for_graenser_privat", "respekt_for_graenser"):
             email_subject = "Ny sag er blevet journaliseret: Respekt For Grænser"
