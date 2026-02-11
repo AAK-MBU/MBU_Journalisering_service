@@ -1,18 +1,20 @@
 """
 This module provides helper functions.
 """
-import re
-import os
-from typing import Dict, List, Union
-from urllib.parse import urlparse, unquote
+
 import json
+import os
+import re
 from io import BytesIO
+from typing import Dict, List, Union
+from urllib.parse import unquote, urlparse
+
 import pyodbc
 from itk_dev_shared_components.smtp import smtp_util
 from mbu_dev_shared_components.database import constants
-from mbu_dev_shared_components.database.logging import log_event
+from mbu_dev_shared_components.database.connection import RPAConnection
 
-from config import LOG_DB, LOG_CONTEXT
+from config import LOG_CONTEXT, LOG_DB
 
 
 def _is_url(string: str) -> bool:
@@ -26,10 +28,12 @@ def _is_url(string: str) -> bool:
         bool: True if the string is a valid URL, False otherwise.
     """
     url_pattern = re.compile(
-        r'^(https?://)?'
-        r'([a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6})'
-        r'(:[0-9]{1,5})?'
-        r'(/.*)?$', re.IGNORECASE)
+        r"^(https?://)?"
+        r"([a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6})"
+        r"(:[0-9]{1,5})?"
+        r"(/.*)?$",
+        re.IGNORECASE,
+    )
     return re.match(url_pattern, string) is not None
 
 
@@ -56,7 +60,9 @@ def find_urls(data: Union[Dict[str, Union[str, dict, list]], list]) -> List[str]
     return urls
 
 
-def find_name_url_pairs(data: Union[Dict[str, Union[str, dict, list]], list]) -> Dict[str, str]:
+def find_name_url_pairs(
+    data: Union[Dict[str, Union[str, dict, list]], list],
+) -> Dict[str, str]:
     """
     Recursively find all name and URL pairs in a nested dictionary or list,
     specifically looking for 'name' and 'url' keys in 'attachments'.
@@ -72,7 +78,11 @@ def find_name_url_pairs(data: Union[Dict[str, Union[str, dict, list]], list]) ->
     def extract_attachments(attachments: dict):
         """Extract name-URL pairs from attachments."""
         for attachment_value in attachments.values():
-            if isinstance(attachment_value, dict) and "name" in attachment_value and "url" in attachment_value:
+            if (
+                isinstance(attachment_value, dict)
+                and "name" in attachment_value
+                and "url" in attachment_value
+            ):
                 name_url_pairs[attachment_value["name"]] = attachment_value["url"]
 
     def extract_linked(linked: dict):
@@ -80,7 +90,11 @@ def find_name_url_pairs(data: Union[Dict[str, Union[str, dict, list]], list]) ->
         for linked_value in linked.values():
             if isinstance(linked_value, dict):
                 for item_data in linked_value.values():
-                    if isinstance(item_data, dict) and "id" in item_data and "url" in item_data:
+                    if (
+                        isinstance(item_data, dict)
+                        and "id" in item_data
+                        and "url" in item_data
+                    ):
                         name_url_pairs[item_data["id"]] = item_data["url"]
 
     def recursive_search(data):
@@ -113,7 +127,7 @@ def extract_filename_from_url(url: str) -> str:
         str: The extracted filename.
     """
     parsed_url = urlparse(url)
-    path_segments = parsed_url.path.split('/')
+    path_segments = parsed_url.path.split("/")
     filename = path_segments[-1]
     original_filename = unquote(filename)
     return original_filename
@@ -130,14 +144,16 @@ def extract_filename_from_url_without_extension(url: str) -> str:
         str: The extracted filename without extension.
     """
     parsed_url = urlparse(url)
-    path_segments = parsed_url.path.split('/')
+    path_segments = parsed_url.path.split("/")
     filename = path_segments[-1]
     original_filename = unquote(filename)
     filename_without_extension, _ = os.path.splitext(original_filename)
     return filename_without_extension
 
 
-def extract_key_value_pairs_from_json(json_data, node_name=None, separator=";#", target_type=str):
+def extract_key_value_pairs_from_json(
+    json_data, node_name=None, separator=";#", target_type=str
+):
     """
     Recursively traverses a JSON object (a dictionary or list) and extracts key-value pairs
     from values that match the specified target type (by default, strings). The key-value pairs
@@ -180,8 +196,10 @@ def extract_key_value_pairs_from_json(json_data, node_name=None, separator=";#",
             A dictionary with key-value pairs extracted from the string.
         """
         categories = value.split(separator)
-        return {categories[i + 1].strip(): categories[i].strip()
-                for i in range(0, len(categories) - 1, 2)}
+        return {
+            categories[i + 1].strip(): categories[i].strip()
+            for i in range(0, len(categories) - 1, 2)
+        }
 
     def find_and_extract_from_node(data):
         """
@@ -195,7 +213,11 @@ def extract_key_value_pairs_from_json(json_data, node_name=None, separator=";#",
         """
         if isinstance(data, dict):
             for key, value in data.items():
-                if key == node_name and isinstance(value, target_type) and separator in str(value):
+                if (
+                    key == node_name
+                    and isinstance(value, target_type)
+                    and separator in str(value)
+                ):
                     result.update(extract_pairs(value))
                 elif isinstance(value, (dict, list)):
                     find_and_extract_from_node(value)
@@ -211,10 +233,10 @@ def extract_key_value_pairs_from_json(json_data, node_name=None, separator=";#",
 def fetch_cases_metadata(connection_string) -> Dict | None:
     """
     Retrieve metadata for a specific os2formWebformId.
-    
+
     Args:
         connection_string (str): The connection string for the database
-        
+
     Returns:
         Dictionary where os2formWebFormId is key and remaining columns from Metadata are values (as dictionaries)"""
     try:
@@ -254,36 +276,35 @@ def fetch_cases_metadata(connection_string) -> Dict | None:
 
 
 def notify_stakeholders(
-        case_metadata,
-        case_id,
-        case_title,
-        case_rel_url,
-        error_message,
-        attachment_bytes,
-        form=None,
-        db_env="PROD"):
+    case_metadata,
+    case_id,
+    case_title,
+    case_rel_url,
+    error_message,
+    attachment_bytes,
+    form=None,
+    db_env="PROD",
+):
     """Notify stakeholders about the journalized case."""
     try:
         if form is None:
             form = {}
         form_type = case_metadata["os2formwebform_id"]
         process_name = case_metadata.get("description")
-        email_sender = constants.get_constant("e-mail_noreply", db_env=db_env)["value"]  # Get constants elsewhere
+        with RPAConnection(db_env=db_env) as rpa_conn:
+            email_sender = rpa_conn.get_constant("e-mail_noreply")["value"]
         email_subject = None
         email_body = None
         email_recipient = None
         caseid = case_id if case_id else "Ukendt"
         casetitle = case_title if case_title else "Ukendt"
         case_url = (
-            "https://go.aarhuskommune.dk" +
-            case_rel_url
-        ) if case_rel_url else None
+            ("https://go.aarhuskommune.dk" + case_rel_url) if case_rel_url else None
+        )
 
         case_data = json.loads(case_metadata.get("caseData", "{}"))
         email_recipient = case_data.get("emailRecipient")
-        email_subject = (
-            f"Ny sag er blevet journaliseret: {process_name}"
-        )
+        email_subject = f"Ny sag er blevet journaliseret: {process_name}"
         email_body = (
             f"<p>Vi vil informere dig om, at en ny sag er blevet journaliseret.</p>"
             f"<p>"
@@ -294,11 +315,13 @@ def notify_stakeholders(
         )
 
         if error_message:
-            critical = form_type in ("indmeld_kraenkelser_af_boern", "respekt_for_graenser_privat", "respekt_for_graenser")
-            email_recipient = constants.get_constant(
-                "Error Email",
-                db_env=db_env
-            )["value"]  # Get constants elsewhere
+            critical = form_type in (
+                "indmeld_kraenkelser_af_boern",
+                "respekt_for_graenser_privat",
+                "respekt_for_graenser",
+            )
+            with RPAConnection(db_env=db_env) as rpa_conn:
+                email_recipient = rpa_conn.get_constant("Error Email")["value"]
             email_subject = "Fejl ved journalisering af sag"
             email_body = (
                 f"<p>Der opstod en fejl ved journalisering af en sag.</p>"
@@ -313,68 +336,77 @@ def notify_stakeholders(
                 f"</p>"
             )
             if critical:
-                rpa_team_email = constants.get_constant("rpa_team_email", db_env=db_env)['value']
+                with RPAConnection(db_env=db_env) as rpa_conn:
+                    rpa_team_email = rpa_conn.get_constant("rpa_team_email")["value"]
                 rpa_team_email_list = json.loads(rpa_team_email)
                 email_recipient = [email_recipient]
                 email_recipient.extend(rpa_team_email_list)
                 email_subject = "!!KRITISK!!! Fejl ved journalisering af sag"
 
-        elif form_type in ("indmeld_kraenkelser_af_boern", "respekt_for_graenser_privat", "respekt_for_graenser"):
+        elif form_type in (
+            "indmeld_kraenkelser_af_boern",
+            "respekt_for_graenser_privat",
+            "respekt_for_graenser",
+        ):
             email_subject = "Ny sag er blevet journaliseret: Respekt For Grænser"
 
         attachments = []
-        if attachment_bytes and form_type not in ["pasningstid", "anmeldelse_af_hjemmeundervisning"]:
+        if attachment_bytes and form_type not in [
+            "pasningstid",
+            "anmeldelse_af_hjemmeundervisning",
+        ]:
             attachment_file = BytesIO(attachment_bytes)
             attachments.append(
-                smtp_util.EmailAttachment(file=attachment_file, file_name=f"journalisering_{caseid}.pdf")
+                smtp_util.EmailAttachment(
+                    file=attachment_file, file_name=f"journalisering_{caseid}.pdf"
+                )
             )
 
         if email_recipient is not None:
+            with RPAConnection(db_env=db_env) as rpa_conn:
+                smtp_server = rpa_conn.get_constant("smtp_server")["value"]
+                smtp_port = rpa_conn.get_constant("smtp_port")["value"]
             smtp_util.send_email(
                 receiver=email_recipient,
                 sender=email_sender,
                 subject=email_subject,
                 body=email_body,
                 html_body=email_body,
-                smtp_server=constants.get_constant("smtp_server", db_env=db_env)[
-                    "value"
-                ],  # Get constants elsewhere
-                smtp_port=constants.get_constant("smtp_port", db_env=db_env)[
-                    "value"
-                ],  # Get constants elsewhere
+                smtp_server=smtp_server,
+                smtp_port=smtp_port,
                 attachments=attachments if attachments else None,
             )
             if error_message:
-                log_event(
-                    log_db=LOG_DB,
-                    level="INFO",
-                    message="Error email sent",
-                    context=f"{LOG_CONTEXT} ({process_name})",
-                    db_env=db_env,
-                )
+                with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                    rpa_conn.log_event(
+                        log_db=LOG_DB,
+                        level="INFO",
+                        message="Error email sent",
+                        context=f"{LOG_CONTEXT} ({process_name})",
+                    )
             else:
-                log_event(
-                    log_db=LOG_DB,
-                    level="INFO",
-                    message="Notification sent to stakeholder",
-                    context=f"{LOG_CONTEXT} ({process_name})",
-                    db_env=db_env
-                )
+                with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                    rpa_conn.log_event(
+                        log_db=LOG_DB,
+                        level="INFO",
+                        message="Notification sent to stakeholder",
+                        context=f"{LOG_CONTEXT} ({process_name})",
+                    )
         else:
-            log_event(
-                log_db=LOG_DB,
-                level="ERROR",
-                message="Stakeholders not notified. No recipient found for notification",
-                context=f"{LOG_CONTEXT} ({process_name})",
-                db_env=db_env,
-            )
+            with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                rpa_conn.log_event(
+                    log_db=LOG_DB,
+                    level="ERROR",
+                    message="Stakeholders not notified. No recipient found for notification",
+                    context=f"{LOG_CONTEXT} ({process_name})",
+                )
 
     except Exception as e:
-        log_event(
-            log_db=LOG_DB,
-            level="ERROR",
-            message=f"Error sending notification mail, {case_id}: {e}",
-            context=f"{LOG_CONTEXT}, ({process_name})",
-            db_env=db_env,
-        )
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                log_db=LOG_DB,
+                level="ERROR",
+                message=f"Error sending notification mail, {case_id}: {e}",
+                context=f"{LOG_CONTEXT}, ({process_name})",
+            )
         print(f"Error sending notification mail, {case_id}: {e}")

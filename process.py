@@ -2,18 +2,17 @@
 
 import json
 
+from mbu_dev_shared_components.database.connection import RPAConnection
+from mbu_dev_shared_components.getorganized.objects import CaseDataJson
 from mbu_dev_shared_components.utils.db_stored_procedure_executor import (
     execute_stored_procedure,
 )
-from mbu_dev_shared_components.getorganized.objects import CaseDataJson
-from mbu_dev_shared_components.database.logging import log_event
 
+from case_manager import journalize_process as jp
 from case_manager.case_handler import CaseHandler
 from case_manager.document_handler import DocumentHandler
-from case_manager import journalize_process as jp
 from case_manager.helper_functions import notify_stakeholders
-
-from config import LOG_DB, LOG_CONTEXT
+from config import LOG_CONTEXT, LOG_DB, MAX_FORM_RETRIES
 
 
 def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
@@ -35,7 +34,9 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
     # Extract form data and metadata
     os2formwebform_id = form["os2formwebform_id"]
     case_metadata = cases_metadata[os2formwebform_id]
-    case_metadata["os2formwebform_id"] = os2formwebform_id  # Pass webformid into case_metadata to retrieve later
+    case_metadata["os2formwebform_id"] = (
+        os2formwebform_id  # Pass webformid into case_metadata to retrieve later
+    )
     process_name = case_metadata["description"]
     form_id = form["form_id"]
     form_submitted_date = form["form_submitted_date"]
@@ -43,6 +44,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
 
     person_full_name = None
     case_folder_id = None
+    case_id = None
 
     create_new_go_case = True
     filename_appendage = ""
@@ -50,8 +52,28 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
     context = f"{LOG_CONTEXT} ({process_name})"
 
     # Get status params
-    status_params_inprogress, status_params_success, status_params_failed, status_params_manual = (
-        get_status_params(form_id)
+    (
+        status_params_inprogress,
+        status_params_success,
+        status_params_failed,
+        status_params_manual,
+    ) = get_status_params(form_id)
+
+    # When status is set to "InProgress" attempt_count is incremented in SQL database
+    execute_stored_procedure(
+        credentials["DbConnectionString"],
+        case_metadata["spUpdateProcessStatus"],
+        status_params_inprogress,
+    )
+
+    # Check whether GO-api is running
+    jp.health_check(
+        case_handler=case_handler,
+        conn_string=credentials["DbConnectionString"],
+        form_id=form_id,
+        update_response_data=case_metadata["spUpdateResponseData"],
+        update_process_status=case_metadata["spUpdateProcessStatus"],
+        process_status_params_failed=status_params_failed,
     )
 
     try:
@@ -61,21 +83,26 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
         )
 
         if ssn is None:
-            if os2formwebform_id in ('indmeldelse_i_modtagelsesklasse'):
-                log_event(
-                    LOG_DB,
-                    "INFO",
-                    "No SSN. Setting status as manual.",
-                    context,
-                    db_env
-                )
+            if os2formwebform_id in ("indmeldelse_i_modtagelsesklasse"):
+                with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                    rpa_conn.log_event(
+                        LOG_DB,
+                        "INFO",
+                        "No SSN. Setting status as manual.",
+                        context,
+                        db_env,
+                    )
                 execute_stored_procedure(
                     credentials["DbConnectionString"],
                     case_metadata["spUpdateProcessStatus"],
-                    status_params_manual
+                    status_params_manual,
                 )
                 return None
-            if os2formwebform_id not in ('respekt_for_graenser', 'respekt_for_graenser_privat', 'indmeld_kraenkelser_af_boern'):
+            if os2formwebform_id not in (
+                "respekt_for_graenser",
+                "respekt_for_graenser_privat",
+                "indmeld_kraenkelser_af_boern",
+            ):
                 raise ValueError("SSN is None")
 
     except ValueError as e:
@@ -87,32 +114,36 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             context=context,
             credentials=credentials,
             form_id=form_id,
+            case_id=case_id,
             db_env=db_env,
             form=form,
         )
-
-    log_event(
-        LOG_DB,
-        "INFO",
-        f"Beginning journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }",
-        context=context,
-        db_env=db_env,
-    )
-
-    execute_stored_procedure(
-        credentials["DbConnectionString"],
-        case_metadata["spUpdateProcessStatus"],
-        status_params_inprogress,
-    )
+    if not form["attempt_count"] or form["attempt_count"] == 0:
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                LOG_DB,
+                "INFO",
+                f"Beginning journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }",
+                context=context,
+                db_env=db_env,
+            )
+    else:
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                LOG_DB,
+                "INFO",
+                f"Retrying journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }, attempt number: {form['attempt_count'] + 1}",
+                context=context,
+            )
 
     if cases_metadata[os2formwebform_id]["caseType"] == "BOR":
-        log_event(
-            log_db=LOG_DB,
-            level="INFO",
-            message="Looking up the citizen.",
-            context=context,
-            db_env=db_env,
-        )
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                log_db=LOG_DB,
+                level="INFO",
+                message="Looking up the citizen.",
+                context=context,
+            )
         try:
             person_full_name, person_go_id = jp.contact_lookup(
                 case_handler=case_handler,
@@ -132,16 +163,17 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 context=context,
                 credentials=credentials,
                 form_id=form_id,
+                case_id=case_id,
                 db_env=db_env,
                 form=form,
             )
-        log_event(
-            LOG_DB,
-            "INFO",
-            "Checking for existing citizen folder.",
-            context=context,
-            db_env=db_env,
-        )
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                LOG_DB,
+                "INFO",
+                "Checking for existing citizen folder.",
+                context=context,
+            )
         try:
             case_folder_id = jp.check_case_folder(
                 case_handler=case_handler,
@@ -155,6 +187,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 update_process_status=case_metadata["spUpdateProcessStatus"],
                 process_status_params_failed=status_params_failed,
                 form_id=form_id,
+                db_env=db_env,
             )
         except Exception as e:
             message = "Error checking for existing citizen folder."
@@ -165,17 +198,18 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 context=context,
                 credentials=credentials,
                 form_id=form_id,
+                case_id=case_id,
                 db_env=db_env,
                 form=form,
             )
         if not case_folder_id:
-            log_event(
-                LOG_DB,
-                "INFO",
-                "Creating citizen folder.",
-                context=context,
-                db_env=db_env,
-            )
+            with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                rpa_conn.log_event(
+                    LOG_DB,
+                    "INFO",
+                    "Creating citizen folder.",
+                    context=context,
+                )
             try:
                 case_folder_id = jp.create_case_folder(
                     case_handler=case_handler,
@@ -198,46 +232,46 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                     context=context,
                     credentials=credentials,
                     form_id=form_id,
+                    case_id=case_id,
                     db_env=db_env,
                     form=form,
                 )
 
     # Modtagelsesklasse: check for existing case_folder
     if os2formwebform_id == "indmeldelse_i_modtagelsesklasse":
-        log_event(
-            LOG_DB,
-            "INFO",
-            "Form type is modtagelsesklasse - performing check for existing citizen case",
-            context=context,
-            db_env=db_env
-        )
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                LOG_DB,
+                "INFO",
+                "Form type is modtagelsesklasse - performing check for existing citizen case",
+                context=context,
+            )
 
-        case_id, case_title, case_rel_url, filename_appendage = jp.look_for_existing_modtagelsesklasse_case(
-            case_handler,
-            document_handler,
-            ssn
+        case_id, case_title, case_rel_url, filename_appendage = (
+            jp.look_for_existing_modtagelsesklasse_case(
+                case_handler, document_handler, ssn
+            )
         )
 
         if case_id != "" and case_title != "" and case_rel_url != "":
-            log_event(
-                LOG_DB,
-                "INFO",
-                f"Existing citizen case found ({case_id}). Will not create a new case.",
-                context=context,
-                db_env=db_env
-            )
+            with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                rpa_conn.log_event(
+                    LOG_DB,
+                    "INFO",
+                    f"Existing citizen case found ({case_id}). Will not create a new case.",
+                    context=context,
+                )
 
             create_new_go_case = False
 
     if create_new_go_case:
-
-        log_event(
-            LOG_DB,
-            "INFO",
-            "Creating case.",
-            context=context,
-            db_env=db_env,
-        )
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                LOG_DB,
+                "INFO",
+                "Creating case.",
+                context=context,
+            )
         case_data = json.loads(case_metadata["caseData"])
         try:
             case_id, case_title, case_rel_url = jp.create_case(
@@ -255,13 +289,13 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 person_full_name=person_full_name,
                 case_folder_id=case_folder_id,
             )
-            log_event(
-                LOG_DB,
-                "INFO",
-                f"Case created with id: {case_id}",
-                context=context,
-                db_env=db_env,
-            )
+            with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                rpa_conn.log_event(
+                    LOG_DB,
+                    "INFO",
+                    f"Case created with id: {case_id}",
+                    context=context,
+                )
         except Exception as e:
             message = f"Error creating case: {e}"
             handle_error(
@@ -271,11 +305,13 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 context=context,
                 credentials=credentials,
                 form_id=form_id,
+                case_id=case_id,
                 db_env=db_env,
                 form=form,
             )
 
-    log_event(LOG_DB, "INFO", "Journalizing file(s).", context=context, db_env=db_env)
+    with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+        rpa_conn.log_event(LOG_DB, "INFO", "Journalizing file(s).", context=context)
     try:
         jp.journalize_file(
             document_handler=document_handler,
@@ -291,7 +327,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             log_db=LOG_DB,
             context=context,
             db_env=db_env,
-            filename_appendage=filename_appendage
+            filename_appendage=filename_appendage,
         )
     except Exception as e:
         message = f"Error journalizing files. {e}"
@@ -302,6 +338,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             context=context,
             credentials=credentials,
             form_id=form_id,
+            case_id=case_id,
             db_env=db_env,
             form=form,
         )
@@ -311,13 +348,13 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
         case_metadata["spUpdateProcessStatus"],
         status_params_success,
     )
-    log_event(
-        LOG_DB,
-        "INFO",
-        f"Ending journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }",
-        context=context,
-        db_env=db_env,
-    )
+    with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+        rpa_conn.log_event(
+            LOG_DB,
+            "INFO",
+            f"Ending journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }",
+            context=context,
+        )
 
 
 def handle_error(
@@ -327,27 +364,43 @@ def handle_error(
     context,
     credentials,
     form_id,
-    db_env="PROD",
+    case_id,
+    db_env,
     form=None,
 ):
     """Function to log and notify on errors"""
-    _, _, status_params_failed, _ = (
-        get_status_params(form_id)
-    )
+    _, _, status_params_failed, _ = get_status_params(form_id)
     # Log
-    log_event(
-        LOG_DB,
-        "ERROR",
-        message,
-        context=context,
-        db_env=db_env,
-    )
+    with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+        rpa_conn.log_event(
+            LOG_DB,
+            "ERROR",
+            message,
+            context=context,
+        )
     # Update status
     execute_stored_procedure(
         credentials["DbConnectionString"],
         case_metadata["spUpdateProcessStatus"],
         status_params_failed,
     )
+    # As long as there is no case, we allow for maximum 3 retries (except respekt_for_grænser) and do not send error email
+    allow_retry = (
+        not case_id
+        and form["attempt_count"]
+        < (
+            MAX_FORM_RETRIES - 1
+        )  # attempt_count = 2 means this is third try -> notify on fail
+        and case_metadata["os2formwebform_id"]
+        not in (
+            "respekt_for_graenser",
+            "respekt_for_graenser_privat",
+            "indmeld_kraenkelser_af_boern",
+        )
+    )
+    if allow_retry:
+        # Raise error but don't notify
+        raise Exception from error
     # Notify
     notify_stakeholders(
         case_metadata=case_metadata,
@@ -392,7 +445,12 @@ def get_status_params(form_id: str):
         "Status": ("str", "Manual"),
         "form_id": ("str", f"{form_id}"),
     }
-    return status_params_inprogress, status_params_success, status_params_failed, status_params_manual
+    return (
+        status_params_inprogress,
+        status_params_success,
+        status_params_failed,
+        status_params_manual,
+    )
 
 
 def extract_ssn(os2formwebform_id, parsed_form_data):
@@ -457,9 +515,13 @@ def extract_ssn(os2formwebform_id, parsed_form_data):
             ):  # Hvis cpr er indtastet manuelt
                 return parsed_form_data["data"]["cpr_barnets_nummer_"].replace("-", "")
         case "skriv_dit_barn_paa_venteliste":
-            if parsed_form_data['data']['barnets_cpr_nummer_mitid'] != '':  # Hvis cpr kommer fra MitID
-                return parsed_form_data['data']['barnets_cpr_nummer_mitid'].replace('-', '')
-            if parsed_form_data['data']['cpr_barnets_nummer_'] != '':
-                return parsed_form_data['data']['cpr_barnets_nummer_'].replace('-', '')
+            if (
+                parsed_form_data["data"]["barnets_cpr_nummer_mitid"] != ""
+            ):  # Hvis cpr kommer fra MitID
+                return parsed_form_data["data"]["barnets_cpr_nummer_mitid"].replace(
+                    "-", ""
+                )
+            if parsed_form_data["data"]["cpr_barnets_nummer_"] != "":
+                return parsed_form_data["data"]["cpr_barnets_nummer_"].replace("-", "")
         case _:
             return None
