@@ -1,7 +1,6 @@
 """Module to handle journalisering functionality in GetOrganized."""
-from mbu_dev_shared_components.getorganized import objects
-from mbu_dev_shared_components.getorganized import cases
-from mbu_dev_shared_components.getorganized import contacts
+
+from mbu_dev_shared_components.getorganized import api, cases, contacts, objects
 
 
 class CaseHandler:
@@ -12,6 +11,7 @@ class CaseHandler:
     - api_username (str): The username for GetOrganized API.
     - api_password (str): The password for GetOrganized API.
     """
+
     def __init__(self, api_endpoint: str, api_username: str, api_password: str):
         self.api_username = api_username
         self.api_password = api_password
@@ -47,7 +47,7 @@ class CaseHandler:
         person_full_name: str,
         person_id: str,
         person_ssn: str,
-        return_when_case_fully_created: bool = True
+        return_when_case_fully_created: bool = True,
     ) -> str:
         """
         Creates JSON data for a case folder.
@@ -56,14 +56,16 @@ class CaseHandler:
         - str: JSON string of case folder data.
         """
         xml_case_metadata = (
-            '<z:row xmlns:z=\"#RowsetSchema\" '
-            'ows_CaseStatus=\"Åben\" '
-            f'ows_CaseCategory=\"Borgermappe\" '
-            f'ows_CCMContactData=\"{person_full_name};#{person_id};#{person_ssn};#;#\" '
-            + '/>'
+            '<z:row xmlns:z="#RowsetSchema" '
+            'ows_CaseStatus="Åben" '
+            f'ows_CaseCategory="Borgermappe" '
+            f'ows_CCMContactData="{person_full_name};#{person_id};#{person_ssn};#;#" '
+            + "/>"
         )
 
-        return self.case_obj.case_data_json(case_type_prefix, xml_case_metadata, return_when_case_fully_created)
+        return self.case_obj.case_data_json(
+            case_type_prefix, xml_case_metadata, return_when_case_fully_created
+        )
 
     def create_case_data(
         self,
@@ -84,7 +86,7 @@ class CaseHandler:
         start_date: str = None,
         special_group: str = None,
         custom_master_case: str = None,
-        return_when_case_fully_created: bool = True
+        return_when_case_fully_created: bool = True,
     ) -> str:
         """
         Creates JSON data for a case.
@@ -93,29 +95,43 @@ class CaseHandler:
         - str: JSON string of case data.
         """
         xml_metadata = (
-            '<z:row xmlns:z=\"#RowsetSchema\" '
-            'ows_CaseStatus=\"Åben\" '
-            f'ows_CaseCategory=\"{case_category}\" '
-            f'ows_Title=\"{case_title}\" '
-            f'ows_CaseOwner=\"{case_owner_id};#{case_owner_name}\" '
-            f'ows_Afdeling=\"{department_id};#{department_name}\" '
-            f'ows_Sagsprofil_{case_type_prefix}=\"{case_profile_id};#{case_profile_name}\" '
-            + (f'ows_CCMParentCase=\"{case_folder_id};#{case_type_prefix}\" ' if case_folder_id else '')
-            + (f'ows_SupplerendeSagsbehandlere=\"{supplementary_case_owners}\" '
+            '<z:row xmlns:z="#RowsetSchema" '
+            'ows_CaseStatus="Åben" '
+            f'ows_CaseCategory="{case_category}" '
+            f'ows_Title="{case_title}" '
+            f'ows_CaseOwner="{case_owner_id};#{case_owner_name}" '
+            f'ows_Afdeling="{department_id};#{department_name}" '
+            f'ows_Sagsprofil_{case_type_prefix}="{case_profile_id};#{case_profile_name}" '
+            + (
+                f'ows_CCMParentCase="{case_folder_id};#{case_type_prefix}" '
+                if case_folder_id
+                else ""
+            )
+            + (
+                f'ows_SupplerendeSagsbehandlere="{supplementary_case_owners}" '
                 if supplementary_case_owners
-                else '')
-            + (f'ows_SupplerendeAfdelinger=\"{supplementary_departments}\" '
+                else ""
+            )
+            + (
+                f'ows_SupplerendeAfdelinger="{supplementary_departments}" '
                 if supplementary_departments
-                else '')
-            + (f'ows_KLENummer=\"{kle_number}\" ' if kle_number else '')
-            + (f'ows_Facet=\"{facet}\" ' if facet else '')
-            + (f'ows_Modtaget=\"{start_date}\" ' if start_date else '')
-            + (f'ows_SpecialGroup=\"{special_group}\" ' if special_group else '')
-            + (f'ows_CustomMasterCase=\"{custom_master_case}\" ' if custom_master_case else '')
-            + '/>'
+                else ""
+            )
+            + (f'ows_KLENummer="{kle_number}" ' if kle_number else "")
+            + (f'ows_Facet="{facet}" ' if facet else "")
+            + (f'ows_Modtaget="{start_date}" ' if start_date else "")
+            + (f'ows_SpecialGroup="{special_group}" ' if special_group else "")
+            + (
+                f'ows_CustomMasterCase="{custom_master_case}" '
+                if custom_master_case
+                else ""
+            )
+            + "/>"
         )
 
-        return self.case_obj.case_data_json(case_type_prefix, xml_metadata, return_when_case_fully_created)
+        return self.case_obj.case_data_json(
+            case_type_prefix, xml_metadata, return_when_case_fully_created
+        )
 
     def search_for_case_folder(self, case_folder_search_data: str, endpoint_path: str):
         """
@@ -127,10 +143,8 @@ class CaseHandler:
         endpoint = self._get_full_endpoint(endpoint_path)
 
         return cases.find_case_by_case_properties(
-            case_folder_search_data,
-            endpoint,
-            self.api_username,
-            self.api_password)
+            case_folder_search_data, endpoint, self.api_username, self.api_password
+        )
 
     def create_case_folder(self, case_folder_data: str, endpoint_path: str):
         """
@@ -141,7 +155,9 @@ class CaseHandler:
         """
         endpoint = self._get_full_endpoint(endpoint_path)
 
-        return cases.create_case_folder(case_folder_data, endpoint, self.api_username, self.api_password)
+        return cases.create_case_folder(
+            case_folder_data, endpoint, self.api_username, self.api_password
+        )
 
     def create_case(self, case_data: str, endpoint_path: str):
         """
@@ -152,7 +168,9 @@ class CaseHandler:
         """
         endpoint = self._get_full_endpoint(endpoint_path)
 
-        return cases.create_case(case_data, endpoint, self.api_username, self.api_password)
+        return cases.create_case(
+            case_data, endpoint, self.api_username, self.api_password
+        )
 
     def contact_lookup(self, person_ssn: str, endpoint_path: str):
         """
@@ -171,4 +189,23 @@ class CaseHandler:
             person_ssn=person_ssn,
             api_endpoint=endpoint,
             api_username=self.api_username,
-            api_password=self.api_password)
+            api_password=self.api_password,
+        )
+
+    def health_check(self, endpoint_path: str):
+        """
+        Checks whether GO API is running
+
+        Parameters:
+        - endpoint_path (str): The endpoint to check
+
+        Returns:
+        - bool: Whether API is running or not
+        """
+
+        endpoint = self._get_full_endpoint(endpoint_path)
+
+        api_ready = api.health_check(
+            endpoint, api_username=self.api_username, api_password=self.api_password
+        )
+        return api_ready
