@@ -210,7 +210,7 @@ def health_check(
     """
     Perform health_check of GetOrganized API
     """
-    api_ok = case_handler.health_check("_api/web")
+    api_ok = case_handler.health_check("/_api/web")
 
     try:
         if not api_ok:
