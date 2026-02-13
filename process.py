@@ -90,7 +90,6 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                         "INFO",
                         "No SSN. Setting status as manual.",
                         context,
-                        db_env,
                     )
                 execute_stored_procedure(
                     credentials["DbConnectionString"],
