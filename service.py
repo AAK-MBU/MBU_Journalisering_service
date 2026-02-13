@@ -80,7 +80,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
             0xF000,
             ("Service is stopping...", ""),
         )
-        with RPAConnection(db_env=ENV) as rpa_conn:
+        with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
             rpa_conn.log_event(
                 LOG_DB, "INFO", "Service is stopping...", context=LOG_CONTEXT
             )
@@ -92,7 +92,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
         ongoing_futures = [f for f in self.futures if f.running()]
         cancelled_futures = [f for f in self.futures if f.cancel()]
         if len(ongoing_futures) > 0:
-            with RPAConnection(db_env=ENV) as rpa_conn:
+            with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
                 rpa_conn.log_event(
                     log_db=LOG_DB,
                     level="INFO",
@@ -114,7 +114,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
         self.processes.clear()
 
         # Log stopped heartbeat
-        with RPAConnection(db_env=ENV) as rpa_conn:
+        with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
             rpa_conn.log_heartbeat(
                 stop=self.stop,
                 servicename=LOG_CONTEXT,
@@ -125,7 +125,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
         servicemanager.LogMsg(
             servicemanager.EVENTLOG_INFORMATION_TYPE, 0xF000, ("Service stopped.", "")
         )
-        with RPAConnection(db_env=ENV) as rpa_conn:
+        with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
             rpa_conn.log_event(LOG_DB, "INFO", "Service stopped.", context=LOG_CONTEXT)
         self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
@@ -141,7 +141,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
             0xF000,
             ("Service is starting...", ""),
         )
-        with RPAConnection(db_env=ENV) as rpa_conn:
+        with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
             rpa_conn.log_event(
                 LOG_DB,
                 "INFO",
@@ -157,7 +157,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                 0xF000,
                 (f"Service encountered an error: {e}", ""),
             )
-            with RPAConnection(db_env=ENV) as rpa_conn:
+            with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
                 rpa_conn.log_event(
                     LOG_DB,
                     "INFO",
@@ -182,7 +182,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
         servicemanager.LogMsg(
             servicemanager.EVENTLOG_INFORMATION_TYPE, 0xF000, ("Service started.", "")
         )
-        with RPAConnection(db_env=ENV) as rpa_conn:
+        with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
             rpa_conn.log_event(
                 LOG_DB,
                 "INFO",
@@ -205,7 +205,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
 
         try:
             while self.running:
-                with RPAConnection(db_env=ENV) as rpa_conn:
+                with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
                     rpa_conn.log_event(
                         LOG_DB,
                         "INFO",
@@ -222,7 +222,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                     ]  # When credential achieved from srv58, it is srv58.
                 )
                 # Fetch new forms
-                with RPAConnection(db_env=ENV) as rpa_conn:
+                with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
                     rpa_conn.log_event(
                         LOG_DB,
                         "INFO",
@@ -238,7 +238,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                     if len(forms_data) > 0
                     else "No forms to journalize."
                 )
-                with RPAConnection(db_env=ENV) as rpa_conn:
+                with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
                     rpa_conn.log_event(
                         LOG_DB,
                         "INFO",
@@ -257,7 +257,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                         ),
                     )
 
-                    with RPAConnection(db_env=ENV) as rpa_conn:
+                    with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
                         rpa_conn.log_event(
                             LOG_DB,
                             "INFO",
@@ -290,7 +290,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                                 # fla
                                 res = future.result()  # Checks for uncaught exceptions in the worker # noqa: F841
                             except Exception as exc:
-                                with RPAConnection(db_env=ENV) as rpa_conn:
+                                with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
                                     rpa_conn.log_event(
                                         log_db=LOG_DB,
                                         level="ERROR",
@@ -305,7 +305,7 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                             )  # Checks for stop event or all tasks finished every half second
 
                     # Exiting ThreadPoolExecutor here
-                    with RPAConnection(db_env=ENV) as rpa_conn:
+                    with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
                         rpa_conn.log_event(
                             log_db=LOG_DB,
                             level="INFO",
