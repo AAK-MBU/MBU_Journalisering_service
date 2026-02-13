@@ -189,11 +189,23 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                 "Service started.",
                 context=LOG_CONTEXT,
             )
+        heartbeat_code = (
+            "from mbu_dev_shared_components.database.connection import RPAConnection\n"
+            f"with RPAConnection(db_env={ENV}, commit=True) as rpa_conn:\n"
+            f"   rpa_conn.log_heartbeat({self.stop},'{LOG_CONTEXT}','{SERVICE_CHECK_INTERVAL}','')"
+        )
+        with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                LOG_DB,
+                "INFO",
+                f"attempting heartbeat with {heartbeat_code}",
+                context=LOG_CONTEXT,
+            )
         self.processes["heartbeat_process"] = subprocess.Popen(
             [
                 "python",
                 "-c",
-                f"from mbu_dev_shared_components.database.logging import log_heartbeat; log_heartbeat('{self.stop}','{LOG_CONTEXT}','{SERVICE_CHECK_INTERVAL}','','{ENV}')",
+                heartbeat_code,
             ]
         )
 
