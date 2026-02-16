@@ -124,7 +124,6 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 "INFO",
                 f"Beginning journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }",
                 context=context,
-                db_env=db_env,
             )
     else:
         with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
