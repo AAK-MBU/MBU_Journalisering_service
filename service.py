@@ -191,16 +191,9 @@ class JournalizeService(win32serviceutil.ServiceFramework):
             )
         heartbeat_code = (
             "from mbu_dev_shared_components.database.connection import RPAConnection\n"
-            f"with RPAConnection(db_env={ENV}, commit=True) as rpa_conn:\n"
-            f"   rpa_conn.log_heartbeat({self.stop},'{LOG_CONTEXT}','{SERVICE_CHECK_INTERVAL}','')"
+            f"with RPAConnection(db_env='{ENV}', commit=True) as rpa_conn:\n"
+            f"    rpa_conn.log_heartbeat({self.stop},'{LOG_CONTEXT}','{SERVICE_CHECK_INTERVAL}','')"
         )
-        with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
-            rpa_conn.log_event(
-                LOG_DB,
-                "INFO",
-                f"attempting heartbeat with {heartbeat_code}",
-                context=LOG_CONTEXT,
-            )
         self.processes["heartbeat_process"] = subprocess.Popen(
             [
                 "python",
@@ -208,6 +201,13 @@ class JournalizeService(win32serviceutil.ServiceFramework):
                 heartbeat_code,
             ]
         )
+        with RPAConnection(db_env=ENV, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                LOG_DB,
+                "INFO",
+                "Heartbeat process started",
+                context=LOG_CONTEXT,
+            )
 
         servicemanager.LogMsg(
             servicemanager.EVENTLOG_INFORMATION_TYPE,
