@@ -200,7 +200,7 @@ def get_credentials_and_constants(db_env="PROD") -> Dict[str, Any]:
 
 
 def health_check(
-    case_handler,
+    case_handler: CaseHandler,
     conn_string: str,
     form_id: str,
     update_response_data: str,
@@ -210,9 +210,10 @@ def health_check(
     """
     Perform health_check of GetOrganized API
     """
-    api_ok = case_handler.health_check("/_api/web")
-
+    api_ok = False
     try:
+        api_ok = case_handler.health_check("/_api/web")
+
         if not api_ok:
             raise RequestError("Api health check failed")
         # SQL data update
