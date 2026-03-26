@@ -617,7 +617,7 @@ def create_case(
     parsed_form_data: Dict[str, Any],
     os2form_webform_id: str,
     case_type: str,
-    case_data: str,
+    case_data: dict,
     conn_string: str,
     update_response_data: str,
     update_process_status: str,
@@ -635,6 +635,21 @@ def create_case(
         Optional[str]:  The case ID, case title, and relative URL if created successfully,
                         otherwise None in case of an error.
     """
+    if os2form_webform_id == "udelukkelse_af_myndighedsindehav":
+        case_types = {
+            "Type 1": "type_1",
+            "Type 2": "type_2",
+        }  # Map form values to metadata keys
+        form_val_type = parsed_form_data.get(
+            "hvilken_sagstype_er_der_tale_om", ""
+        )  # Get form value
+        data_type = case_types.get(
+            form_val_type, ""
+        )  # Get metadata key from form value
+        case_data = case_data.get(data_type, None)  # Get casedata from metadata key
+        if not case_data:
+            raise ValueError(f"case_data not set: {case_data = }")
+
     try:
         case_title = determine_case_title(
             os2form_webform_id,
