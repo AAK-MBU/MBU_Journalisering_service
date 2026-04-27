@@ -178,3 +178,5 @@ tests/
 config.py
 run_single_form.py
 launch.json
+
+*code-workspace

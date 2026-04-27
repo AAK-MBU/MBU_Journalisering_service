@@ -262,6 +262,26 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
 
             create_new_go_case = False
 
+    if os2formwebform_id == 'udelukkelse_af_myndighedsindehav':
+        form_type = parsed_form_data.get("hvad_oensker_du_at_udfylde_radio", "Ukendt")
+
+        # Look for case in SQL database
+        sql_case_id, case_id = ... # New function get_sql_case_id() should return SQL case and GO case id
+
+        if form_type == 'Ny sag':
+            if sql_case_id:
+                # Raise error and notify stakeholders
+            else:
+                # Continue, so case is created
+        elif form_type in ('Ændring...','Luk...'):
+            if not case_id:
+                # Raise error for RPA team: no active case in SQL database with ESDHId
+            # Otherwise go on and journalize in existing case
+            create_new_go_case = False
+
+
+
+
     if create_new_go_case:
         with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
             rpa_conn.log_event(
@@ -294,6 +314,20 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                     f"Case created with id: {case_id}",
                     context=context,
                 )
+
+            if (
+                os2formwebform_id == "udelukkelse_af_myndighedsindehav"
+            ):  # Log SagsId i sagsdatabasen for fratagelse af forældremyndigheders
+                with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                    sp_params = {
+                        "FormId": (str, form_id),
+                        "ESDHId": (str, case_id),
+                        "ESDHSystem": (str, "GetOrganized"),
+                    }
+                    rpa_conn.execute_stored_procedure(
+                        stored_procedure="formynd.sp_register_esdh_reference",
+                        params=sp_params,
+                    )
         except Exception as e:
             message = f"Error creating case: {e}"
             handle_error(
