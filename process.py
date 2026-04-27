@@ -489,9 +489,9 @@ def extract_ssn(os2formwebform_id, parsed_form_data):
                     "-", ""
                 )
             if (
-                parsed_form_data["data"]["elevens_cpr_nummer"] != ""
+                parsed_form_data["data"]["cpr_elevens_nummer"] != ""
             ):  # Hvis cpr er indtastet manuelt
-                return parsed_form_data["data"]["elevens_cpr_nummer"].replace("-", "")
+                return parsed_form_data["data"]["cpr_elevens_nummer"].replace("-", "")
         case "anmeldelse_af_hjemmeundervisning":
             if (
                 parsed_form_data["data"]["barnets_cpr_nummer_mitid"] != ""
