@@ -11,7 +11,6 @@ from urllib.parse import unquote, urlparse
 
 import pyodbc
 from itk_dev_shared_components.smtp import smtp_util
-from mbu_dev_shared_components.database import constants
 from mbu_dev_shared_components.database.connection import RPAConnection
 
 from config import LOG_CONTEXT, LOG_DB
@@ -410,3 +409,15 @@ def notify_stakeholders(
                 context=f"{LOG_CONTEXT}, ({process_name})",
             )
         print(f"Error sending notification mail, {case_id}: {e}")
+
+
+def udelukkelse_form_type(parsed_form_data: dict):
+    case_types = {
+        "Type 1": "TYPE_1",
+        "Type 2": "TYPE_2",
+    }  # Map form values to metadata keys
+    form_val_type = parsed_form_data.get(
+        "hvilken_sagstype_er_der_tale_om", ""
+    )  # Get form value
+    data_type = case_types.get(form_val_type, "")  # Get metadata key from form value
+    return data_type

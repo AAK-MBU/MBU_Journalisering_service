@@ -27,8 +27,10 @@ from case_manager.helper_functions import (
     extract_key_value_pairs_from_json,
     find_name_url_pairs,
     notify_stakeholders,
+    udelukkelse_form_type,
 )
 from config import (
+    ENV,
     FORM_RETRY_WAIT_CONTACT_LOOKUP_MINUTES,
     FORM_RETRY_WAIT_HEALTH_CHECK_MINUTES,
 )
@@ -636,16 +638,7 @@ def create_case(
                         otherwise None in case of an error.
     """
     if os2form_webform_id == "udelukkelse_af_myndighedsindehav":
-        case_types = {
-            "Type 1": "type_1",
-            "Type 2": "type_2",
-        }  # Map form values to metadata keys
-        form_val_type = parsed_form_data.get(
-            "hvilken_sagstype_er_der_tale_om", ""
-        )  # Get form value
-        data_type = case_types.get(
-            form_val_type, ""
-        )  # Get metadata key from form value
+        data_type = udelukkelse_form_type(parsed_form_data=parsed_form_data)
         case_data = case_data.get(data_type, None)  # Get casedata from metadata key
         if not case_data:
             raise ValueError(f"case_data not set: {case_data = }")
@@ -990,3 +983,30 @@ def look_for_existing_modtagelsesklasse_case(case_handler, document_handler, ssn
         filename_appendage = f"_{max_suffix}"
 
     return case_id, case_title, case_relative_url, filename_appendage
+
+
+def get_case_id_udelukkelse(ssn: str):
+
+    query = f"""
+        SELECT 
+            akt.SagId
+            ,akt.BarnCPR
+            ,akt.ESDHId
+            ,s.OprettetFraFormId as FormId
+        FROM [rpa].[formynd].[vw_AktiveSager] as akt
+        LEFT JOIN [rpa].[formynd].[Sag] as s
+        ON s.SagId = akt.SagId
+        WHERE 
+            akt.BarnCPR = {ssn}
+    """
+    with RPAConnection(db_env=ENV, commit=False) as rpa_conn:
+        res = rpa_conn.execute_query(query, return_dict=True)
+
+    if res and len(res) > 1:
+        raise ValueError(
+            f"More than one active case for {ssn = }. {len(res)} active cases found"
+        )
+    if not res:
+        return {}
+
+    return res[0]

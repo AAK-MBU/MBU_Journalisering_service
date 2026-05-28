@@ -262,25 +262,31 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
 
             create_new_go_case = False
 
-    if os2formwebform_id == 'udelukkelse_af_myndighedsindehav':
+    if os2formwebform_id == "udelukkelse_af_myndighedsindehav":
         form_type = parsed_form_data.get("hvad_oensker_du_at_udfylde_radio", "Ukendt")
 
         # Look for case in SQL database
-        sql_case_id, case_id = ... # New function get_sql_case_id() should return SQL case and GO case id
+        case_res = jp.get_case_id_udelukkelse(ssn=ssn)
+        sql_case_id = case_res.get("SagId")
+        form_id_sql = case_res.get("FormId")
+        case_id = case_res.get("ESDHId")
 
-        if form_type == 'Ny sag':
-            if sql_case_id:
-                # Raise error and notify stakeholders
-            else:
-                # Continue, so case is created
-        elif form_type in ('Ændring...','Luk...'):
+        if form_type == "Ny sag":
+            if sql_case_id and form_id_sql != form_id:
+                raise ValueError(
+                    f"A case in the SQL database is active and created from a different form id. {form_id = }, {form_id_sql = }"
+                )
+            if case_id:
+                raise ValueError(
+                    f"A GetOrganized case is already connected to an active case on the child. {case_id = }"
+                )
+            create_new_go_case = True
+        elif form_type in ("Ændring/forlængelse af sag", "Lukning af sag"):
             if not case_id:
-                # Raise error for RPA team: no active case in SQL database with ESDHId
-            # Otherwise go on and journalize in existing case
+                raise ValueError(
+                    f"A form to change or close a case has been submitted, but no case id found. Case data from SQL: {case_res}"
+                )
             create_new_go_case = False
-
-
-
 
     if create_new_go_case:
         with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
@@ -502,6 +508,7 @@ def extract_ssn(os2formwebform_id, parsed_form_data):
             "indmeldelse_i_modtagelsesklasse"
             | "ansoegning_om_koersel_af_skoleel"
             | "ansoegning_om_midlertidig_koerse"
+            | "udelukkelse_af_myndighedsindehav"
         ):
             if parsed_form_data["data"].get("cpr_barnets_nummer", "") != "":
                 return parsed_form_data["data"]["cpr_barnets_nummer"].replace("-", "")
