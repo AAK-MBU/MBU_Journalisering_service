@@ -725,15 +725,7 @@ def journalize_file(
                 f"{filename_without_extension}{filename_appendage}"
             )
 
-        print(f"DEBUG upload_single_document:")
-        print(f"  case_id          : {case_id!r}")
-        print(f"  filename         : {filename!r}")
-        print(f"  document_title   : {filename_without_extension!r}")
-        print(f"  document_date    : {received_date!r}")
-        print(f"  document_category: {document_category!r}")
-        print(f"  url              : {url!r}")
         file_bytes = download_file_bytes(url, os2_api_key)
-        print(f"  downloaded bytes : {len(file_bytes)}")
         upload_status = "failed"
         upload_attempts = 0
 
@@ -752,7 +744,6 @@ def journalize_file(
             if upload_attempts == 0:
                 # Print payload structure on first attempt (skip the raw byte array)
                 if isinstance(document_data, dict):
-                    print(f"DEBUG document payload (no bytes):")
                     for k, v in document_data.items():
                         if isinstance(v, (list, bytes)) and len(v) > 20:
                             print(f"  {k}: <{len(v)} items>")

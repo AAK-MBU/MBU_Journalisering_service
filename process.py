@@ -566,17 +566,17 @@ def handle_error(
     if allow_retry:
         # Raise error but don't notify
         raise Exception from error
-    # # Notify
-    # notify_stakeholders(
-    #     case_metadata=case_metadata,
-    #     case_id=None,
-    #     case_title=None,
-    #     case_rel_url=None,
-    #     error_message=f"{message}: {error}",
-    #     attachment_bytes=None,
-    #     form=form,
-    #     db_env=db_env,
-    # )
+    # Notify
+    notify_stakeholders(
+        case_metadata=case_metadata,
+        case_id=None,
+        case_title=None,
+        case_rel_url=None,
+        error_message=f"{message}: {error}",
+        attachment_bytes=None,
+        form=form,
+        db_env=db_env,
+    )
     raise Exception from error
 
 
