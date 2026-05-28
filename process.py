@@ -1,6 +1,7 @@
 """This module contains the main process of the robot."""
 
 import json
+import xml.etree.ElementTree as ET
 
 from mbu_dev_shared_components.database.connection import RPAConnection
 from mbu_dev_shared_components.getorganized.objects import CaseDataJson
@@ -9,6 +10,7 @@ from mbu_dev_shared_components.utils.db_stored_procedure_executor import (
 )
 
 from case_manager import journalize_process as jp
+from case_manager import ppr_journalization
 from case_manager.case_handler import CaseHandler
 from case_manager.document_handler import DocumentHandler
 from case_manager.helper_functions import notify_stakeholders
@@ -45,6 +47,8 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
     person_full_name = None
     case_folder_id = None
     case_id = None
+    case_title = None
+    case_rel_url = None
 
     create_new_go_case = True
     filename_appendage = ""
@@ -133,6 +137,8 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 f"Retrying journalizing - {form_id = }, {form_submitted_date = }, {os2formwebform_id = }, attempt number: {form['attempt_count'] + 1}",
                 context=context,
             )
+
+    case_data = json.loads(case_metadata["caseData"])
 
     if cases_metadata[os2formwebform_id]["caseType"] == "BOR":
         with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
@@ -235,6 +241,168 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                     form=form,
                 )
 
+    elif cases_metadata[os2formwebform_id]["caseType"] == "PPR":
+        create_new_go_case = False
+
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                log_db=LOG_DB,
+                level="INFO",
+                message="Looking up the citizen.",
+                context=context,
+            )
+        try:
+            person_full_name, person_go_id = jp.contact_lookup(
+                case_handler=case_handler,
+                ssn=ssn,
+                conn_string=credentials["DbConnectionString"],
+                update_response_data=case_metadata["spUpdateResponseData"],
+                update_process_status=case_metadata["spUpdateProcessStatus"],
+                process_status_params_failed=status_params_failed,
+                form_id=form_id,
+            )
+        except Exception as e:
+            message = "Error looking up the citizen"
+            handle_error(
+                message=message,
+                case_metadata=case_metadata,
+                error=e,
+                context=context,
+                credentials=credentials,
+                form_id=form_id,
+                case_id=case_id,
+                db_env=db_env,
+                form=form,
+            )
+
+        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+            rpa_conn.log_event(
+                LOG_DB,
+                "INFO",
+                "Checking for existing PPR Befordring foranstaltningsmappe.",
+                context=context,
+            )
+        try:
+            befordring_result = ppr_journalization.check_for_befordring_case(
+                case_handler=case_handler,
+                case_data_handler=case_data_handler,
+                case_type=case_metadata["caseType"],
+                person_full_name=person_full_name,
+                person_go_id=person_go_id,
+                ssn=ssn,
+                conn_string=credentials["DbConnectionString"],
+                update_process_status=case_metadata["spUpdateProcessStatus"],
+                process_status_params_failed=status_params_failed,
+            )
+
+            if befordring_result:
+                ppr_case_id = befordring_result.get("ppr_case_id")
+                befordring_case_id = befordring_result.get("befordring_case_id")
+
+                if befordring_case_id:
+                    case_id = befordring_case_id
+                    case_title = f"Kørsel til {person_full_name}"
+                    # Fetch the relative URL from the existing case
+                    _meta = case_handler.get_case_metadata(f"/_goapi/Cases/Metadata/{case_id}")
+                    if _meta.ok:
+                        _attrib = ET.fromstring(_meta.json().get("Metadata", "")).attrib
+                        case_rel_url = _attrib.get("ows_CaseUrl", "")
+                    else:
+                        case_rel_url = ""
+
+                elif ppr_case_id:
+                    # we then have to create the befordring case - the case id for the created befordring case, is attached to the var case_id
+                    case_id, case_title, case_rel_url = ppr_journalization.create_befordring_case(
+                        case_handler=case_handler,
+                        parsed_form_data=parsed_form_data,
+                        os2form_webform_id=os2formwebform_id,
+                        case_type=case_metadata["caseType"],
+                        case_data=case_data,
+                        conn_string=credentials["DbConnectionString"],
+                        update_response_data=case_metadata["spUpdateResponseData"],
+                        update_process_status=case_metadata["spUpdateProcessStatus"],
+                        process_status_params_failed=status_params_failed,
+                        form_id=form_id,
+                        ppr_case_id=ppr_case_id,
+                        person_full_name=person_full_name,
+                        person_go_id=person_go_id,
+                        person_ssn=ssn,
+                    )
+
+            else:
+                # Neither exists, create both parent PPR case and befordring sub-case
+                with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                    rpa_conn.log_event(
+                        LOG_DB,
+                        "INFO",
+                        "Creating new PPR case folder.",
+                        context=context,
+                    )
+                try:
+                    ppr_case_id = ppr_journalization.create_case_folder(
+                        case_handler=case_handler,
+                        case_type=case_metadata["caseType"],
+                        person_full_name=person_full_name,
+                        person_go_id=person_go_id,
+                        ssn=ssn,
+                        conn_string=credentials["DbConnectionString"],
+                        update_response_data=case_metadata["spUpdateResponseData"],
+                        update_process_status=case_metadata["spUpdateProcessStatus"],
+                        process_status_params_failed=status_params_failed,
+                        form_id=form_id,
+                    )
+                    if ppr_case_id:
+                        with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                            rpa_conn.log_event(
+                                LOG_DB,
+                                "INFO",
+                                "Creating befordring sub-case.",
+                                context=context,
+                            )
+                        case_id, case_title, case_rel_url = ppr_journalization.create_befordring_case(
+                            case_handler=case_handler,
+                            parsed_form_data=parsed_form_data,
+                            os2form_webform_id=os2formwebform_id,
+                            case_type=case_metadata["caseType"],
+                            case_data=case_data,
+                            conn_string=credentials["DbConnectionString"],
+                            update_response_data=case_metadata["spUpdateResponseData"],
+                            update_process_status=case_metadata["spUpdateProcessStatus"],
+                            process_status_params_failed=status_params_failed,
+                            form_id=form_id,
+                            ppr_case_id=ppr_case_id,
+                            person_full_name=person_full_name,
+                            person_go_id=person_go_id,
+                            person_ssn=ssn,
+                        )
+                except Exception as e:
+                    message = "Error creating PPR case and befordring sub-case."
+                    handle_error(
+                        message=message,
+                        case_metadata=case_metadata,
+                        error=e,
+                        context=context,
+                        credentials=credentials,
+                        form_id=form_id,
+                        case_id=case_id,
+                        db_env=db_env,
+                        form=form,
+                    )
+
+        except Exception as e:
+            message = "Error checking for existing befordring case."
+            handle_error(
+                message=message,
+                case_metadata=case_metadata,
+                error=e,
+                context=context,
+                credentials=credentials,
+                form_id=form_id,
+                case_id=case_id,
+                db_env=db_env,
+                form=form,
+            )
+
     # Modtagelsesklasse: check for existing case_folder
     if os2formwebform_id == "indmeldelse_i_modtagelsesklasse":
         with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
@@ -270,7 +438,6 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 "Creating case.",
                 context=context,
             )
-        case_data = json.loads(case_metadata["caseData"])
         try:
             case_id, case_title, case_rel_url = jp.create_case(
                 case_handler=case_handler,
@@ -399,17 +566,17 @@ def handle_error(
     if allow_retry:
         # Raise error but don't notify
         raise Exception from error
-    # Notify
-    notify_stakeholders(
-        case_metadata=case_metadata,
-        case_id=None,
-        case_title=None,
-        case_rel_url=None,
-        error_message=f"{message}: {error}",
-        attachment_bytes=None,
-        form=form,
-        db_env=db_env,
-    )
+    # # Notify
+    # notify_stakeholders(
+    #     case_metadata=case_metadata,
+    #     case_id=None,
+    #     case_title=None,
+    #     case_rel_url=None,
+    #     error_message=f"{message}: {error}",
+    #     attachment_bytes=None,
+    #     form=form,
+    #     db_env=db_env,
+    # )
     raise Exception from error
 
 
@@ -521,5 +688,16 @@ def extract_ssn(os2formwebform_id, parsed_form_data):
                 )
             if parsed_form_data["data"]["cpr_barnets_nummer_"] != "":
                 return parsed_form_data["data"]["cpr_barnets_nummer_"].replace("-", "")
+
+        case "ansoegning_om_koersel_med_skoleb":
+            if (
+                parsed_form_data["data"]["cpr_nummer_barn_mitid"] != ""
+            ):  # Hvis cpr kommer fra MitID
+                return parsed_form_data["data"]["cpr_nummer_barn_mitid"].replace(
+                    "-", ""
+                )
+            if parsed_form_data["data"]["cpr_nummer_barn_manuelt"] != "":
+                return parsed_form_data["data"]["cpr_nummer_barn_manuelt"].replace("-", "")
+
         case _:
             return None

@@ -116,6 +116,16 @@ def find_name_url_pairs(
     return name_url_pairs
 
 
+# SharePoint/GO illegal filename characters: ~ " # % & * : < > ? \ { | }
+# Replace any of these with a dash so GO accepts the filename.
+_ILLEGAL_FILENAME_CHARS = re.compile(r'[~"#%&*:<>?\\{|}]')
+
+
+def _sanitize_filename(name: str) -> str:
+    """Replace SharePoint-illegal characters in a filename stem or full name."""
+    return _ILLEGAL_FILENAME_CHARS.sub('-', name)
+
+
 def extract_filename_from_url(url: str) -> str:
     """
     Extract the filename from a given URL.
@@ -124,13 +134,14 @@ def extract_filename_from_url(url: str) -> str:
         url (str): The URL to extract the filename from.
 
     Returns:
-        str: The extracted filename.
+        str: The extracted filename, with SharePoint-illegal characters removed.
     """
     parsed_url = urlparse(url)
     path_segments = parsed_url.path.split("/")
     filename = path_segments[-1]
     original_filename = unquote(filename)
-    return original_filename
+    stem, ext = os.path.splitext(original_filename)
+    return _sanitize_filename(stem) + ext
 
 
 def extract_filename_from_url_without_extension(url: str) -> str:
@@ -141,14 +152,14 @@ def extract_filename_from_url_without_extension(url: str) -> str:
         url (str): The URL to extract the filename from.
 
     Returns:
-        str: The extracted filename without extension.
+        str: The extracted filename without extension, with SharePoint-illegal characters removed.
     """
     parsed_url = urlparse(url)
     path_segments = parsed_url.path.split("/")
     filename = path_segments[-1]
     original_filename = unquote(filename)
     filename_without_extension, _ = os.path.splitext(original_filename)
-    return filename_without_extension
+    return _sanitize_filename(filename_without_extension)
 
 
 def extract_key_value_pairs_from_json(
