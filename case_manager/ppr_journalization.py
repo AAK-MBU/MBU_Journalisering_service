@@ -228,22 +228,6 @@ def create_befordring_case(
             journalize_process.determine_case_profile(os2form_webform_id, case_data, parsed_form_data)
         )
 
-        print("DEBUG create_befordring_case — input fields:")
-        print(f"  case_type       : {case_type!r}")
-        print(f"  ppr_case_id     : {ppr_case_id!r}")
-        print(f"  person_full_name: {person_full_name!r}")
-        print(f"  case_title      : {case_title!r}")
-        print(f"  caseCategory    : {case_data.get('caseCategory')!r}")
-        print(f"  caseOwnerId     : {case_data.get('caseOwnerId')!r}")
-        print(f"  caseOwnerName   : {case_data.get('caseOwnerName')!r}")
-        print(f"  caseProfileId   : {case_data.get('caseProfileId')!r}")
-        print(f"  caseProfileName : {case_data.get('caseProfileName')!r}")
-        print(f"  departmentId    : {case_data.get('departmentId')!r}")
-        print(f"  departmentName  : {case_data.get('departmentName')!r}")
-        print(f"  kleNumber       : {case_data.get('kleNumber')!r}")
-        print(f"  facet           : {case_data.get('facet')!r}")
-        print(f"  startDate       : {received_date or case_data.get('startDate')!r}")
-
         created_case_data = create_case_data(
             case_handler=case_handler,
             case_type=case_type,
@@ -258,15 +242,12 @@ def create_befordring_case(
             person_ssn=person_ssn,
         )
 
-        print(f"DEBUG: MetadataXml being sent:\n  {created_case_data.get('MetadataXml', created_case_data)}")
-
         # Fetch metadata of the parent case — print every attribute
         import xml.etree.ElementTree as ET
         parent_meta_response = case_handler.get_case_metadata(f"/_goapi/Cases/Metadata/{ppr_case_id}")
         if parent_meta_response.ok:
             try:
                 attrib = ET.fromstring(parent_meta_response.json().get("Metadata", "")).attrib
-                print(f"DEBUG: PPR parent case {ppr_case_id!r} — ALL metadata attributes:")
                 for key, value in sorted(attrib.items()):
                     print(f"  {key}: {value!r}")
             except Exception as meta_err:
@@ -278,9 +259,6 @@ def create_befordring_case(
         response = case_handler.create_case(created_case_data, "/_goapi/Cases")
 
         if not response.ok:
-            print(f"ERROR: GO API returned {response.status_code}")
-            print(f"  Response body   : {response.text}")
-            print(f"  Response headers: {dict(response.headers)}")
             raise RequestError("Request response failed.")
 
         case_id = response.json()["CaseID"]
@@ -344,7 +322,6 @@ def _search_for_sub_case(
         raise RequestError("Request response failed during sub-case search.")
 
     cases_info = response.json().get("CasesInfo", [])
-    print(f"DEBUG _search_for_sub_case — title={case_title!r}, hits: {[c.get('CaseID') for c in cases_info]}")
     if cases_info:
         return cases_info[0].get("CaseID")
 
@@ -378,7 +355,6 @@ def _search_for_ppr_case(
     pattern = re.compile(r"^PPR-\d{4}-\d{6}$")
     cases_info = response.json().get("CasesInfo", [])
 
-    print(f"DEBUG _search_for_ppr_case — all cases found for citizen:")
     for c in cases_info:
         print(f"  CaseID={c.get('CaseID')!r}  Title={c.get('Title', c.get('CaseTitle', '?'))!r}")
 
