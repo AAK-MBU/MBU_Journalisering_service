@@ -15,12 +15,14 @@ import pyodbc
 from dateutil.relativedelta import relativedelta
 from itk_dev_shared_components.smtp import smtp_util
 from mbu_dev_shared_components.database.connection import RPAConnection
+from mbu_dev_shared_components.getorganized.objects import CaseDataJson
 from mbu_dev_shared_components.os2forms.documents import download_file_bytes
 from mbu_dev_shared_components.utils.db_stored_procedure_executor import (
     execute_stored_procedure,
 )
 
 from case_manager.case_handler import CaseHandler
+from case_manager.document_handler import DocumentHandler
 from case_manager.helper_functions import (
     extract_filename_from_url,
     extract_filename_from_url_without_extension,
@@ -246,7 +248,7 @@ def health_check(
 
 
 def contact_lookup(
-    case_handler,
+    case_handler: CaseHandler,
     ssn: str,
     conn_string: str,
     update_response_data: str,
@@ -298,8 +300,8 @@ def contact_lookup(
 
 
 def check_case_folder(
-    case_handler,
-    case_data_handler,
+    case_handler: CaseHandler,
+    case_data_handler: CaseDataJson,
     case_type: str,
     person_full_name: str,
     person_go_id: str,
@@ -692,7 +694,7 @@ def create_case(
 
 
 def journalize_file(
-    document_handler,
+    document_handler: DocumentHandler,
     case_id: str,
     case_title,
     case_rel_url: str,
@@ -739,6 +741,17 @@ def journalize_file(
                 overwrite="true",
             )
 
+            if upload_attempts == 0:
+                # Print payload structure on first attempt (skip the raw byte array)
+                if isinstance(document_data, dict):
+                    for k, v in document_data.items():
+                        if isinstance(v, (list, bytes)) and len(v) > 20:
+                            print(f"  {k}: <{len(v)} items>")
+                        else:
+                            print(f"  {k}: {v!r}")
+                else:
+                    print(f"DEBUG document payload type={type(document_data)}: {str(document_data)[:500]}")
+
             response = document_handler.upload_document(
                 document_data, "/_goapi/Documents/AddToCase"
             )
@@ -747,6 +760,7 @@ def journalize_file(
             if response.ok:
                 upload_status = "succeeded"
             else:
+                print(f"DEBUG upload attempt {upload_attempts} failed: {response.status_code} — {response.text[:500]}")
                 time.sleep(wait_sec)
 
         attempts_string = f"{upload_attempts} attempt"
@@ -790,9 +804,23 @@ def journalize_file(
             else ""
         )
 
+        # If only one category is configured and no key matches the document
+        # name, use that single category as a catch-all (avoids the need to
+        # keep DB keys in sync with OS2forms filenames when all documents share
+        # the same category).
+        single_category_fallback = (
+            next(iter(document_category_json.values()))
+            if len(document_category_json) == 1
+            else "Indgående"
+        )
+
+        print(f"DEBUG category lookup dict: {document_category_json}")
+        print(f"DEBUG document names from form: {list(urls.keys())}")
+
         documents, document_ids = [], []
         for name, url in urls.items():
-            document_category = document_category_json.get(name, "Indgående")
+            document_category = document_category_json.get(name, single_category_fallback)
+            print(f"DEBUG  name={name!r} -> category={document_category!r} (matched={name in document_category_json})")
             doc, doc_id, file_bytes = upload_single_document(
                 url, received_date, document_category
             )
@@ -912,7 +940,7 @@ def journalize_file(
         )
 
 
-def look_for_existing_modtagelsesklasse_case(case_handler, document_handler, ssn):
+def look_for_existing_modtagelsesklasse_case(case_handler: CaseHandler, document_handler: DocumentHandler, ssn):
     """
     A function to look for an existing citizen case for a specified form type
     """

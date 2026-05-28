@@ -1,5 +1,6 @@
 """Module to handle journalisering functionality in GetOrganized."""
 
+from xml.sax.saxutils import escape
 from mbu_dev_shared_components.getorganized import api, cases, contacts, objects
 
 
@@ -67,6 +68,32 @@ class CaseHandler:
             case_type_prefix, xml_case_metadata, return_when_case_fully_created
         )
 
+    def create_ppr_case_folder_data(
+        self,
+        case_type_prefix: objects.CaseTypePrefix,
+        person_full_name: str,
+        person_id: str,
+        person_ssn: str,
+        return_when_case_fully_created: bool = True,
+    ) -> str:
+        """
+        Creates JSON data for a case folder.
+
+        Returns:
+        - str: JSON string of case folder data.
+        """
+        xml_case_metadata = (
+            '<z:row xmlns:z="#RowsetSchema" '
+            'ows_CaseStatus="Åben" '
+            f'ows_CaseCategory="Offentlig" '
+            f'ows_CCMContactData="{person_full_name};#{person_id};#{person_ssn};#;#" '
+            + "/>"
+        )
+
+        return self.case_obj.case_data_json(
+            case_type_prefix, xml_case_metadata, return_when_case_fully_created
+        )
+
     def create_case_data(
         self,
         case_type_prefix: objects.CaseTypePrefix,
@@ -126,6 +153,60 @@ class CaseHandler:
                 if custom_master_case
                 else ""
             )
+            + "/>"
+        )
+
+        return self.case_obj.case_data_json(
+            case_type_prefix, xml_metadata, return_when_case_fully_created
+        )
+
+    def create_ppr_case(
+        self,
+        case_type_prefix: objects.CaseTypePrefix,
+        case_category: str,
+        case_owner_id: str,
+        case_owner_name: str,
+        case_profile_id: str,
+        case_profile_name: str,
+        case_title: str,
+        case_folder_id: str = None,
+        department_id: str = None,
+        department_name: str = None,
+        kle_number: str = None,
+        facet: str = None,
+        start_date: str = None,
+        person_full_name: str = None,
+        person_go_id: str = None,
+        person_ssn: str = None,
+        return_when_case_fully_created: bool = True,
+    ) -> str:
+        """
+        Creates JSON data for a case.
+
+        Returns:
+        - str: JSON string of case data.
+        """
+        xml_metadata = (
+            '<z:row xmlns:z="#RowsetSchema" '
+            'ows_CaseStatus="Åben" '
+            f'ows_CaseCategory="{escape(case_category)}" '
+            f'ows_Title="{escape(case_title)}" '
+            f'ows_CaseOwner="{case_owner_id};#{escape(case_owner_name)}" '
+            + (f'ows_Afdeling="{department_id};#{escape(department_name)}" ' if department_id and department_name else "")
+            + f'ows_Sagsprofil_{case_type_prefix}="{case_profile_id};#{escape(case_profile_name)}" '
+            + (
+                f'ows_CCMParentCase="{case_folder_id};#{case_type_prefix}" '
+                if case_folder_id
+                else ""
+            )
+            + (
+                f'ows_CCMContactData="{escape(person_full_name)};#{person_go_id};#{person_ssn};#;#" '
+                if person_full_name and person_go_id and person_ssn
+                else ""
+            )
+            + (f'ows_KLENummer="{escape(kle_number)}" ' if kle_number else "")
+            + (f'ows_Facet="{escape(facet)}" ' if facet else "")
+            + (f'ows_Modtaget="{escape(start_date)}" ' if start_date else "")
             + "/>"
         )
 
