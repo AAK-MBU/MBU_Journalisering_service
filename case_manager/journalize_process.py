@@ -134,7 +134,7 @@ def get_forms_data(
                 ,f.form_data
                 ,CAST(f.form_submitted_date AS datetime) AS form_submitted_date
                 ,f.form_type as os2formwebform_id,
-                j.attempt_count
+                COALESCE(j.attempt_count, 0) as attempt_count
             FROM
                 [RPA].[journalizing].[Journalizing] j
             JOIN
