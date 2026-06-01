@@ -160,7 +160,7 @@ def create_case_folder(
         return None
 
 
-def create_case_data(
+def create_ppr_case_data(
     case_handler: CaseHandler,
     case_type: str,
     case_data: Dict[str, Any],
@@ -228,7 +228,7 @@ def create_befordring_case(
             journalize_process.determine_case_profile(os2form_webform_id, case_data, parsed_form_data)
         )
 
-        created_case_data = create_case_data(
+        created_case_data = create_ppr_case_data(
             case_handler=case_handler,
             case_type=case_type,
             case_data=case_data,
@@ -300,31 +300,35 @@ def _search_for_sub_case(
     person_full_name: str,
     person_go_id: str,
     ssn: str,
-    case_title: str,
 ) -> Optional[str]:
-    """Search for a specific sub-case by title."""
+    """Find the befordring sub-case for this citizen.
 
-    properties_for_case_search = {"ows_Title": case_title}
-
-    search_data = case_data_handler.generic_search_case_data_json(
+    Searches by exact ows_CCMContactData match and ows_Title Contains 'Kørsel til ',
+    so the title name format (diacritics, truncated names, etc.) is irrelevant.
+    """
+    search_data = case_data_handler.simple_search_case_data_json(
         case_type_prefix=case_type,
-        person_full_name=person_full_name,
-        person_id=person_go_id,
-        person_ssn=ssn,
-        field_properties=properties_for_case_search
+        field_properties={
+            "ows_CCMContactData": {
+                "value": f"{person_full_name};#{person_go_id};#{ssn};#;#",
+                "comparison": "Equal",
+            },
+            "ows_Title": {"value": "Kørsel til ", "comparison": "Contains"},
+        },
+        returned_cases_number="200",
     )
-
     response = case_handler.search_for_case_folder(
         search_data, "/_goapi/cases/findbycaseproperties"
     )
-
     if not response.ok:
         raise RequestError("Request response failed during sub-case search.")
 
-    cases_info = response.json().get("CasesInfo", [])
-    if cases_info:
-        return cases_info[0].get("CaseID")
-
+    valid = [
+        c for c in response.json().get("CasesInfo", [])
+        if c.get("ItemExists", True) is not False
+    ]
+    if valid:
+        return valid[0].get("CaseID")
     return None
 
 
@@ -336,31 +340,31 @@ def _search_for_ppr_case(
     person_go_id: str,
     ssn: str,
 ) -> Optional[str]:
-    """Search for any parent PPR case."""
+    """Search for the parent PPR folder.
 
+    Uses person_full_name as-is for ows_CCMContactData — GO stores the contact
+    data with the correct special characters, so no normalisation is needed here.
+    Results where ItemExists is False (orphaned records) are ignored.
+    """
+    pattern = re.compile(r"^PPR-\d{4}-\d{6}$")
     search_data = case_data_handler.generic_search_case_data_json(
         case_type_prefix=case_type,
         person_full_name=person_full_name,
         person_id=person_go_id,
         person_ssn=ssn,
     )
-
     response = case_handler.search_for_case_folder(
         search_data, "/_goapi/cases/findbycaseproperties"
     )
-
     if not response.ok:
         raise RequestError("Request response failed during PPR case search.")
 
-    pattern = re.compile(r"^PPR-\d{4}-\d{6}$")
-    cases_info = response.json().get("CasesInfo", [])
-
-    for c in cases_info:
-        print(f"  CaseID={c.get('CaseID')!r}  Title={c.get('Title', c.get('CaseTitle', '?'))!r}")
-
-    for case in cases_info:
+    valid = [
+        c for c in response.json().get("CasesInfo", [])
+        if c.get("ItemExists", True) is not False
+    ]
+    for case in valid:
         case_id = case.get("CaseID")
-
         if pattern.fullmatch(case_id):
             return case_id
 
@@ -389,13 +393,11 @@ def check_for_befordring_case(
         Returns None if neither exists.
     """
 
-    case_title = f"Kørsel til {person_full_name}"
-
     try:
         # First, try to find the specific sub-case
         befordring_case_id = _search_for_sub_case(
             case_handler, case_data_handler, case_type,
-            person_full_name, person_go_id, ssn, case_title
+            person_full_name, person_go_id, ssn,
         )
 
         # Then try to find parent PPR case

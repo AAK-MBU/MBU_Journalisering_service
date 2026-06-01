@@ -283,6 +283,7 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 context=context,
             )
         try:
+            print(f"LALALALAL FULL NAME: {person_full_name}")
             befordring_result = ppr_journalization.check_for_befordring_case(
                 case_handler=case_handler,
                 case_data_handler=case_data_handler,
@@ -552,10 +553,7 @@ def handle_error(
     # As long as there is no case, we allow for maximum 3 retries (except respekt_for_grænser) and do not send error email
     allow_retry = (
         not case_id
-        and form["attempt_count"]
-        < (
-            MAX_FORM_RETRIES - 1
-        )  # attempt_count = 2 means this is third try -> notify on fail
+        and (form.get("attempt_count") or 0) < (MAX_FORM_RETRIES - 1)  # attempt_count = 2 means this is third try -> notify on fail
         and case_metadata["os2formwebform_id"]
         not in (
             "respekt_for_graenser",
