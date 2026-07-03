@@ -214,6 +214,25 @@ class CaseHandler:
             case_type_prefix, xml_metadata, return_when_case_fully_created
         )
 
+    def open_case(self, case_id: str, reason: str = None, endpoint_path: str = "/_goapi/Cases/OpenCase"):
+        """
+        Reopens a closed case in the GetOrganized system.
+
+        Parameters:
+        - case_id (str): The unique identifier of the case to reopen.
+        - reason (str, optional): Reason for reopening the case.
+        - endpoint_path (str): The specific path for the API endpoint.
+        """
+        endpoint = self._get_full_endpoint(endpoint_path)
+
+        return cases.open_case(
+            case_id=case_id,
+            api_endpoint=endpoint,
+            api_username=self.api_username,
+            api_password=self.api_password,
+            reason=reason,
+        )
+
     def search_for_case_folder(self, case_folder_search_data: str, endpoint_path: str):
         """
         Search for case folder

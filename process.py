@@ -283,7 +283,6 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
                 context=context,
             )
         try:
-            print(f"LALALALAL FULL NAME: {person_full_name}")
             befordring_result = ppr_journalization.check_for_befordring_case(
                 case_handler=case_handler,
                 case_data_handler=case_data_handler,
@@ -299,6 +298,37 @@ def main_process(form, credentials, cases_metadata, db_env="PROD") -> None:
             if befordring_result:
                 ppr_case_id = befordring_result.get("ppr_case_id")
                 befordring_case_id = befordring_result.get("befordring_case_id")
+
+                if ppr_case_id:
+                    try:
+                        case_reopened = ppr_journalization.ensure_ppr_case_open(
+                            case_handler=case_handler,
+                            ppr_case_id=ppr_case_id,
+                            conn_string=credentials["DbConnectionString"],
+                            update_process_status=case_metadata["spUpdateProcessStatus"],
+                            process_status_params_failed=status_params_failed,
+                        )
+                        if case_reopened:
+                            with RPAConnection(db_env=db_env, commit=True) as rpa_conn:
+                                rpa_conn.log_event(
+                                    LOG_DB,
+                                    "INFO",
+                                    f"PPR case {ppr_case_id} was closed - reopened it.",
+                                    context=context,
+                                )
+                    except Exception as e:
+                        message = "Error ensuring PPR case is open."
+                        handle_error(
+                            message=message,
+                            case_metadata=case_metadata,
+                            error=e,
+                            context=context,
+                            credentials=credentials,
+                            form_id=form_id,
+                            case_id=case_id,
+                            db_env=db_env,
+                            form=form,
+                        )
 
                 if befordring_case_id:
                     case_id = befordring_case_id
