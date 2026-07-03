@@ -5,8 +5,9 @@ It contains functionality to upload and journalize documents, and manage case da
 
 import json
 import re
+import xml.etree.ElementTree as ET
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from mbu_dev_shared_components.database.connection import RPAConnection
 from mbu_dev_shared_components.getorganized.objects import CaseDataJson
@@ -242,20 +243,6 @@ def create_befordring_case(
             person_ssn=person_ssn,
         )
 
-        # Fetch metadata of the parent case — print every attribute
-        import xml.etree.ElementTree as ET
-        parent_meta_response = case_handler.get_case_metadata(f"/_goapi/Cases/Metadata/{ppr_case_id}")
-        if parent_meta_response.ok:
-            try:
-                attrib = ET.fromstring(parent_meta_response.json().get("Metadata", "")).attrib
-                for key, value in sorted(attrib.items()):
-                    print(f"  {key}: {value!r}")
-            except Exception as meta_err:
-                print(f"DEBUG: Could not parse parent metadata: {meta_err} — raw: {parent_meta_response.text[:500]}")
-        else:
-            print(f"DEBUG: get_case_metadata for {ppr_case_id!r} returned {parent_meta_response.status_code}")
-
-
         response = case_handler.create_case(created_case_data, "/_goapi/Cases")
 
         if not response.ok:
@@ -369,6 +356,65 @@ def _search_for_ppr_case(
             return case_id
 
     return None
+
+
+def ensure_ppr_case_open(
+    case_handler: CaseHandler,
+    ppr_case_id: str,
+    conn_string: str,
+    update_process_status: str,
+    process_status_params_failed: str,
+) -> bool:
+    """
+    Ensure the PPR case is open, reopening it if it is closed.
+
+    Fetches the case metadata and checks ows_CaseState ("0" = open).
+    If the case is closed, it is reopened via the OpenCase endpoint.
+
+    Returns:
+        bool: True if the case was closed and has been reopened,
+              False if the case was already open.
+    """
+    try:
+        meta_response = case_handler.get_case_metadata(
+            f"/_goapi/Cases/Metadata/{ppr_case_id}"
+        )
+        if not meta_response.ok:
+            raise RequestError(
+                "Request response failed during PPR case metadata lookup."
+            )
+
+        attrib = ET.fromstring(meta_response.json().get("Metadata", "")).attrib
+        case_state = attrib.get("ows_CaseState")
+
+        if case_state == "0":
+            return False
+
+        open_response = case_handler.open_case(
+            case_id=ppr_case_id,
+            reason="Genåbnet automatisk ifm. journalisering af befordringsansøgning.",
+        )
+        if not open_response.ok:
+            raise RequestError("Request response failed during reopening of PPR case.")
+
+        return True
+
+    except (DatabaseError, RequestError) as e:
+        handle_database_error(
+            conn_string, update_process_status, process_status_params_failed, e
+        )
+        return False
+
+    except Exception as e:
+        handle_database_error(
+            conn_string,
+            update_process_status,
+            process_status_params_failed,
+            RuntimeError(
+                f"An unexpected error occurred while ensuring PPR case is open: {e}"
+            ),
+        )
+        return False
 
 
 def check_for_befordring_case(
