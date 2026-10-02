@@ -717,15 +717,46 @@ def extract_ssn(os2formwebform_id, parsed_form_data):
             if parsed_form_data["data"]["cpr_barnets_nummer_"] != "":
                 return parsed_form_data["data"]["cpr_barnets_nummer_"].replace("-", "")
 
-        case "ansoegning_om_koersel_med_skoleb":
+        case "ansoegning_om_koersel_med_skoleb" | "ny_ansoegning_om_koersel_af_skol":
             if (
-                parsed_form_data["data"]["cpr_nummer_barn_mitid"] != ""
-            ):  # Hvis cpr kommer fra MitID
+                parsed_form_data["data"].get("cpr_nummer_barn_mitid", "") != ""
+            ):  # Hvis barnet er valgt via MitID
                 return parsed_form_data["data"]["cpr_nummer_barn_mitid"].replace(
                     "-", ""
                 )
-            if parsed_form_data["data"]["cpr_nummer_barn_manuelt"] != "":
+            if parsed_form_data["data"].get("cpr_nummer_barn_manuelt", "") != "":
                 return parsed_form_data["data"]["cpr_nummer_barn_manuelt"].replace("-", "")
+            return None
+
+        case "ny_ansoegning_om_midlertidig_koe":
+            # Four CPR fields, because three kinds of applicant use this form:
+            #
+            #   a parent  — logs in with MitID (cpr_nummer_mitid is THEIR number),
+            #               then picks the child from a dropdown
+            #               (cpr_nummer_barn_mitid) or types it
+            #               (cpr_nummer_barn_manuelt)
+            #   a teacher — logs in and types the pupil's number
+            #               (cpr_nummer_elev)
+            #   the pupil — logs in themselves and fills none of the three
+            #               above; cpr_nummer_mitid IS the pupil
+            #
+            # So any of the three child/pupil fields identifies the student
+            # directly, and cpr_nummer_mitid is only the student when none of
+            # them is filled. Reading cpr_nummer_mitid first would journalize a
+            # parent's own CPR as the child's.
+            for field in (
+                "cpr_nummer_elev",
+                "cpr_nummer_barn_mitid",
+                "cpr_nummer_barn_manuelt",
+            ):
+                if parsed_form_data["data"].get(field, "") != "":
+                    return parsed_form_data["data"][field].replace("-", "")
+
+            # Nothing points at someone else, so the applicant is the student.
+            if parsed_form_data["data"].get("cpr_nummer_mitid", "") != "":
+                return parsed_form_data["data"]["cpr_nummer_mitid"].replace("-", "")
+
+            return None
 
         case _:
             return None
