@@ -51,7 +51,7 @@ case records / finalizes them, and notifies stakeholders by email.
 | `case_manager/case_handler.py` | `CaseHandler` – thin wrapper around the GO case/contact API (`mbu_dev_shared_components.getorganized`). |
 | `case_manager/document_handler.py` | `DocumentHandler` – GO document upload, journalize, finalize, search. |
 | `case_manager/helper_functions.py` | Attachment URL extraction, metadata fetch, stakeholder email notifications. |
-| `test_single_form.py` | Manual script that runs one form (`FORM_ID`) through `main_process` against **PROD**. |
+| `test_single_form.py` | Manual script that runs one form through `main_process` in the `ENV` from `config.py`. |
 | `utils.py` | Legacy heartbeat helper (not used by the service). |
 
 ## Configuration
@@ -120,5 +120,7 @@ python service.py remove
 python service.py debug   # run in the foreground for troubleshooting
 ```
 
-To debug a single submission, set `FORM_ID` in `test_single_form.py` and run it. **It runs against the
-PROD database and GetOrganized**, so it creates real cases and documents.
+To debug a single submission, run `python test_single_form.py <form_id>`. If you leave out the form ID,
+it uses `FORM_ID` from the script. It runs in the `ENV` set in `config.py`, so **with `ENV = "PROD"` it
+creates real cases and documents**. It refuses forms whose status is `Successful` or `InProgress` unless
+you pass `--force`. It warns if the form type isn't in `HANDLE_FORMS`, because the service would skip it.
