@@ -5,16 +5,42 @@ Usage:
     python test_single_form.py [FORM_ID] [--force]
 
 Runs against the database/GetOrganized environment set by ENV in config.py.
+Attachments listed in SKIP_FILES are not uploaded.
 """
 
 import sys
 import pyodbc
 from case_manager import journalize_process as jp
-from case_manager.helper_functions import fetch_cases_metadata
+from case_manager.helper_functions import (
+    extract_filename_from_url,
+    fetch_cases_metadata,
+    find_name_url_pairs,
+)
 from config import ENV, HANDLE_FORMS
 from process import main_process
 
-FORM_ID = "f10e7cec-778d-429e-9675-71ebd8440f06"
+FORM_ID = "a2401d16-44af-4432-bcb1-85f06de0e0bb"
+
+# Attachments to leave out of the upload, e.g. because they already exist on the
+# case. Matched case-insensitively against the attachment name and the filename in its URL.
+SKIP_FILES = {"img_0166.jpeg"}
+
+
+def find_name_url_pairs_with_skip(data):
+    """find_name_url_pairs, minus any attachment listed in SKIP_FILES."""
+    skip = {name.lower() for name in SKIP_FILES}
+    pairs = {}
+    for name, url in find_name_url_pairs(data).items():
+        if str(name).lower() in skip or extract_filename_from_url(url).lower() in skip:
+            print(f"! Skipping attachment {name} ({url})")
+            continue
+        pairs[name] = url
+    return pairs
+
+
+# journalize_file looks up find_name_url_pairs in the journalize_process module,
+# so patching it there only affects this test run.
+jp.find_name_url_pairs = find_name_url_pairs_with_skip
 
 args = [a for a in sys.argv[1:] if a != "--force"]
 form_id = args[0] if args else FORM_ID
